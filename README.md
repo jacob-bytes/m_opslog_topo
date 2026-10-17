@@ -77,9 +77,8 @@
   - **经典（默认）**：蓝色主色、柔和圆角、轻阴影，就是最初那版
   - **shadcn**：zinc 中性色、8px 圆角、细边框、Dialog / Tabs / Checkbox / Badge / Toast 的 shadcn 形态
   - 在「显示选项 → 界面风格」切换，组件结构不变，只换 token，选择会本地记忆
-- **四套节点风格**：
+- **三套节点风格**：
   - **线稿（默认）**：白底 + 类型色细边框 + 线框图标 + 端口点阵
-  - **玻璃**：浅色类型头部 + 端口分段条 + 柔和投影
   - **shadcn**：纯中性卡片，无类型色；靠线框图标与文字标签区分，未识别设备用虚线边框
   - **机架拟物**：真实前面板、机架挡板与导轨
   - 顶栏节点风格下拉或「显示选项 → 节点风格」切换，选择会保存在浏览器本地
@@ -98,7 +97,7 @@
 - **链路自动聚合**：设备视图链路超过 300 条且主机 ≥20 时自动折叠成主机组，chip 可随时关闭
 - **侧栏渐进披露**：低频显示项收进「高级显示」，基础侧栏只保留高频操作
 - **侧栏折叠 / 全屏预览**：侧栏一键收起、画布自动重新适配；拓扑区可全屏预览，`Esc` 退出
-- **华为 OceanStor 存储**：卡片显示 HUAWEI 标识与 OceanStor 型号（线稿/玻璃/机架为红色，shadcn 为中性灰）；机架风格带 12 盘位 OceanStor 面板；详情含厂商/型号，搜索支持 `Huawei` / `OceanStor`
+- **华为 OceanStor 存储**：卡片显示 HUAWEI 标识与 OceanStor 型号（线稿/机架为红色，shadcn 为中性灰）；机架风格带 12 盘位 OceanStor 面板；详情含厂商/型号，搜索支持 `Huawei` / `OceanStor`
 - **两级粒度**：设备视图（多网口聚合）／端口视图（每个 WWN 网口一个小模块，带链路指示灯与外侧色条）
 - **完整的筛选层级**：
   - 设备类型（主机 / 交换机 / 存储 / 未识别）
@@ -421,12 +420,11 @@ HTML 体积主要来自内联的 vis-network（约 0.8 MB），图数据本身�
 - **界面风格**：「显示选项 → 界面风格」切换 **经典 / shadcn**。经典是默认，恢复最初那版蓝色外壳；shadcn 是中性 zinc 外壳。两者共用同一套 DOM 和组件结构，区别只在 token。
 - **节点风格**：顶栏下拉菜单或「显示选项 → 节点风格」切换，默认线稿。
 
-| 经典 + 线稿（默认） | 经典 + 玻璃 | 经典 + 机架 | shadcn + shadcn |
-| --- | --- | --- | --- |
-| <img src="docs/preview-device.png" width="270"> | <img src="docs/preview-glass.png" width="270"> | <img src="docs/preview-skeuo.png" width="270"> | <img src="docs/preview-shadcn.png" width="270"> |
+| 经典 + 线稿（默认） | 经典 + 机架 | shadcn + shadcn |
+| --- | --- | --- |
+| <img src="docs/preview-device.png" width="270"> | <img src="docs/preview-skeuo.png" width="270"> | <img src="docs/preview-shadcn.png" width="270"> |
 
 - **经典 + 线稿**：最初那版的观感，蓝色主色 + 类型色细边框
-- **经典 + 玻璃**：柔和类型色头部、端口分段条
 - **经典 + 机架**：真实前面板、机架挡板与导轨
 - **shadcn + shadcn**：完整 shadcn 视觉，中性外壳 + 纯中性节点卡片
 
@@ -462,7 +460,7 @@ HTML 体积主要来自内联的 vis-network（约 0.8 MB），图数据本身�
 
 显示位置：
 
-- 节点卡左上角状态点（所有四套节点风格 + shadcn 都有）
+- 节点卡左上角状态点（所有三套节点风格都有）
 - 异常链路红色虚线；正常链路保持类型色
 - 侧栏图例新增正常 / 降级 / 离线 / 未知和异常链路
 - 设备概览卡显示健康计数
@@ -642,7 +640,7 @@ HTML 体积主要来自内联的 vis-network（约 0.8 MB），图数据本身�
 ```
 topo.py                    主程序：解析 → 中间产物 → 渲染
 template/index.html        页面骨架
-template/style.css         样式（shadcn 外壳 + 四套节点风格）
+template/style.css         样式（shadcn 外壳 + 三套节点风格）
 template/app.js            绘制、筛选、布局、交互
 assets/vis-network.min.js  图渲染库（构建时内联进 HTML）
 sample/config.txt          样例主机 / 存储配置
@@ -804,7 +802,7 @@ groups     ── 预留的业务分组字段（当前渲染器不消费）
 - **概览卡**：`updateStats()` 的 `entries` 或 `rows` 加一项即可
 - **搜索**：在 `deviceOnlyMatches()` / `deviceMatches()` 里加字段匹配
 - **筛选**：在 `state` 里加开关，在 `computeView()` 里参与可见性计算
-- **卡片**：在四种 `draw*DeviceNode` 里加字段；如果只加详情，则不用动 canvas
+- **卡片**：在三种 `draw*DeviceNode` 里加字段；如果只加详情，则不用动 canvas
 
 <a id="sec-8-3"></a>
 
@@ -843,7 +841,7 @@ state.isolateQuery // 搜索是否直接过滤
 | `topo.py` | `TYPE_LABEL`；如果是输入解析，还要 `guess_type` / `TYPE_ALIASES` |
 | `template/app.js` | `TYPE_LABEL`、`TYPE_ICON`、`palette()`、`drawTypeGlyph()`、`TYPE_ORDER` |
 | `computeRanks()` / `layout()` | 新类型放在第几层、和谁相邻、列顺序 |
-| 四种节点渲染 | `drawLine*` / `drawGlass*` / `drawShadcn*` / `drawSkeuo*` |
+| 三种节点渲染 | `drawLine*` / `drawShadcn*` / `drawSkeuo*` |
 | 筛选与统计 | `renderTypeFilters()`、`renderKindFilters()`、picker 分组、`updateStats()` |
 | 视觉资产 | `style.css` 的类型色变量、图例、picker 图标 |
 | 数据契约 | `docs/graph-schema.md` 的 `type` 枚举 |
@@ -1053,7 +1051,7 @@ python3 topo.py --graph sample/mini.graph.json -o /tmp/mini.html
 - 分析范围依赖 meta.site/fabric/rack；没有字段的设备视为共享设备保留
 - 端口矩阵展示的是当前设备的原始端口/链路，不跟随画布的端口筛选
 - 搜索默认只高亮；勾选「仅显示搜索结果」才会改变画布
-- 新增设备类型/链路类型不是纯数据扩展，需要同时改解析、布局、筛选、图例和四套节点渲染
+- 新增设备类型/链路类型不是纯数据扩展，需要同时改解析、布局、筛选、图例和三套节点渲染
 - 页面是生成时快照，不做实时刷新、增量更新或服务端权限
 
 ---

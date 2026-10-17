@@ -14,7 +14,7 @@
   var FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
   var MONO = '"SFMono-Regular", ui-monospace, Menlo, Consolas, monospace';
   var TYPE_LABEL = { host: '主机', switch: '交换机', storage: '存储阵列', unknown: '未识别设备' };
-  var STYLE_LABELS = { line: '线稿', glass: '玻璃', shadcn: 'shadcn', skeuo: '机架' };
+  var STYLE_LABELS = { line: '线稿', shadcn: 'shadcn', skeuo: '机架' };
   var exportScale = 1;
   var AUTO_BUNDLE_MIN_LINKS = 300;
   var TYPE_ICON = { host: '▣', switch: '⬡', storage: '▤', unknown: '?' };
@@ -1156,179 +1156,6 @@
     ctx.restore();
   }
 
-  function drawGlassDeviceNode(info, node, flags) {
-    var ctx = info.ctx, x = info.x, y = info.y;
-    var w = node._w, h = node._h;
-    var d = devById.get(node._device);
-    if (!d) return { drawNode: function () {}, nodeDimensions: { width: w, height: h } };
-    var pal = palette()[d.type] || palette().unknown;
-    var compact = node._compact;
-    var dim = !!flags.dim;
-    var dark = state.theme === 'dark';
-    var l = x - w / 2, t = y - h / 2;
-    var hot = info.state.hover || info.state.selected;
-    var radius = compact ? 12 : 16;
-
-    ctx.save();
-    if (dim) ctx.globalAlpha = 0.28;
-
-    ctx.shadowColor = hot ? alpha(pal.accent, 0.3) : (dark ? 'rgba(0,0,0,0.5)' : 'rgba(15,23,42,0.12)');
-    ctx.shadowBlur = hot ? 26 : (compact ? 10 : 18);
-    ctx.shadowOffsetY = compact ? 3 : 7;
-    rrect(ctx, l, t, w, h, radius);
-    ctx.fillStyle = dark ? '#0f1b2e' : '#ffffff';
-    ctx.fill();
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-
-    // 浅色头部
-    ctx.save();
-    rrect(ctx, l, t, w, h, radius);
-    ctx.clip();
-    var band = ctx.createLinearGradient(0, t, 0, t + 64);
-    band.addColorStop(0, alpha(pal.accent, dark ? 0.3 : 0.14));
-    band.addColorStop(1, alpha(pal.accent, 0));
-    ctx.fillStyle = band;
-    ctx.fillRect(l, t, w, 64);
-    ctx.restore();
-
-    if (!compact) {
-      ctx.strokeStyle = alpha(pal.accent, dark ? 0.24 : 0.16);
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(l + 1, t + 63);
-      ctx.lineTo(l + w - 1, t + 63);
-      ctx.stroke();
-    }
-
-    // 内高光 + 外边框
-    rrect(ctx, l + 1.2, t + 1.2, w - 2.4, h - 2.4, radius - 1);
-    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.9)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    var border = alpha(pal.accent, hot ? 0.8 : 0.42);
-    var bw = hot ? 2.2 : 1.3;
-    if (flags.hit) { border = '#f59e0b'; bw = 3; }
-    if (flags.path) { border = '#ef4444'; bw = 3; }
-    if (flags.center) { border = pal.accent; bw = 2.4; }
-    rrect(ctx, l + 0.65, t + 0.65, w - 1.3, h - 1.3, radius);
-    ctx.strokeStyle = border;
-    ctx.lineWidth = bw;
-    ctx.stroke();
-
-    if (h > 168) drawSoftBody(ctx, node, l, t, w, h, pal, false);
-
-    if (compact) {
-      drawTypeGlyph(ctx, d.type, l + 24, t + h / 2, 17, pal.accent, 1.7);
-      ctx.textAlign = 'left';
-      ctx.font = '700 12.5px ' + FONT;
-      ctx.fillStyle = dark ? pal.ink : '#0f172a';
-      ctx.fillText(clipText(ctx, d.type === 'unknown' ? '未识别' : d.label, w - 112), l + 44, t + h / 2 + 1);
-      ctx.textAlign = 'right';
-      ctx.font = '600 9.5px ' + FONT;
-      ctx.fillStyle = pal.accent;
-      ctx.fillText(d._group ? d._groupCount + ' 台' : d.ports.length + ' 口', l + w - 12, t + h / 2 + 1);
-    } else {
-      // 图标
-      var is = 34, ix = l + 14, iy = t + 13;
-      var ig = ctx.createLinearGradient(ix, iy, ix, iy + is);
-      ig.addColorStop(0, dark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.75)');
-      ig.addColorStop(1, alpha(pal.accent, dark ? 0.2 : 0.1));
-      rrect(ctx, ix, iy, is, is, 10);
-      ctx.fillStyle = ig;
-      ctx.fill();
-      ctx.strokeStyle = alpha(pal.accent, dark ? 0.28 : 0.2);
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      drawTypeGlyph(ctx, d.type, ix + is / 2, iy + is / 2, 18, pal.accent, 1.7);
-
-      ctx.textAlign = 'left';
-      ctx.font = '700 15px ' + FONT;
-      ctx.fillStyle = dark ? pal.ink : '#0f172a';
-      ctx.fillText(clipText(ctx, d.type === 'unknown' ? '未识别' : d.label, w - 84), l + 57, t + 29);
-
-      ctx.font = '600 8.5px ' + FONT;
-      ctx.fillStyle = alpha(pal.accent, 0.95);
-      ctx.fillText(d.type === 'storage' ? storageInfo(d).model : TYPE_LABEL[d.type], l + 57, t + 45);
-      if (d.type === 'storage') drawStorageVendor(ctx, d, l + w - 14, t + 20);
-
-      var sub;
-      if (d.type === 'switch') sub = '第 ' + switchLayer(d) + ' 层' + (d.ips && d.ips.length ? ' · ' + d.ips[0] : '');
-      else if (d.type === 'storage') sub = storageIpText(d);
-      else if (d.type === 'host') sub = (d.ips && d.ips.length ? d.ips[0] : '未配置 IP');
-      else sub = '未纳管 · ' + shortWwn(d.wwn);
-      if (state.showWwn && d.wwn) sub = shortWwn(d.wwn);
-      ctx.font = '500 10px ' + FONT;
-      ctx.fillStyle = pal.muted;
-      ctx.fillText(clipText(ctx, sub, w - 28), l + 14, t + 78);
-
-      // 端口分段条
-      var barX = l + 14, barW = w - 28, barY = t + 95;
-      var total = d.ports.length;
-      var connected = d.ports.filter(function (p) { return p.connected; }).length;
-      var shownN = Math.min(total, 18);
-      var segGap = 3;
-      if (shownN > 0) {
-        var segW = (barW - (shownN - 1) * segGap) / shownN;
-        for (var si = 0; si < shownN; si++) {
-          var sp = d.ports[si];
-          var son = sp.connected && !state.offPorts.has(sp.id);
-          rrect(ctx, barX + si * (segW + segGap), barY, Math.max(2, segW), 4, 2);
-          ctx.fillStyle = son ? alpha(pal.accent, 0.85) : (dark ? 'rgba(148,163,184,0.18)' : alpha(pal.accent, 0.13));
-          ctx.fill();
-        }
-        if (total > shownN) {
-          ctx.textAlign = 'right';
-          ctx.font = '600 8px ' + FONT;
-          ctx.fillStyle = pal.muted;
-          ctx.fillText('+' + (total - shownN), l + w - 14, barY - 4);
-          ctx.textAlign = 'left';
-        }
-      }
-
-      ctx.strokeStyle = dark ? 'rgba(148,163,184,0.12)' : 'rgba(15,23,42,0.07)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(l + 14, t + 114);
-      ctx.lineTo(l + w - 14, t + 114);
-      ctx.stroke();
-
-      var shown = d.ports.filter(function (p2) { return !state.offPorts.has(p2.id); }).length;
-      var fy = t + 132;
-      var mx = l + 16;
-      ctx.textAlign = 'left';
-      ctx.font = '600 10px ' + FONT;
-      ctx.textBaseline = 'middle';
-      ctx.beginPath();
-      ctx.arc(mx, fy - 0.5, 2.2, 0, 7);
-      ctx.fillStyle = pal.accent;
-      ctx.fill();
-      var pt = (shown < total ? shown + '/' : '') + total + ' 网口';
-      ctx.fillStyle = pal.muted;
-      ctx.fillText(pt, mx + 7, fy);
-      mx += 7 + ctx.measureText(pt).width + 12;
-      ctx.beginPath();
-      ctx.arc(mx, fy - 0.5, 2.2, 0, 7);
-      ctx.fillStyle = '#10b981';
-      ctx.fill();
-      var ct = '已连 ' + connected;
-      ctx.fillStyle = pal.muted;
-      ctx.fillText(ct, mx + 7, fy);
-
-      if (d.type === 'switch') {
-        ctx.textAlign = 'right';
-        ctx.font = '700 8.5px ' + MONO;
-        ctx.fillStyle = alpha(pal.accent, 0.95);
-        ctx.fillText('L' + switchLayer(d), l + w - 16, fy);
-      }
-    }
-
-    ctx.restore();
-    return { drawNode: function () {}, nodeDimensions: { width: w, height: h } };
-  }
-
   function drawLineDeviceNode(info, node, flags) {
     var ctx = info.ctx, x = info.x, y = info.y;
     var w = node._w, h = node._h;
@@ -1455,83 +1282,6 @@
     ctx.restore();
     return { drawNode: function () {}, nodeDimensions: { width: w, height: h } };
   }
-
-  function drawGlassPortNode(info, node, flags) {
-    var ctx = info.ctx, x = info.x, y = info.y;
-    var w = node._w, h = node._h;
-    var d = devById.get(node._device);
-    var p = portById.get(node._port);
-    if (!d || !p) return { drawNode: function () {}, nodeDimensions: { width: w, height: h } };
-    var pal = palette()[d.type] || palette().unknown;
-    var on = !!p.connected;
-    var dim = !!flags.dim;
-    var dark = state.theme === 'dark';
-    var l = x - w / 2, t = y - h / 2;
-    var side = node._side;
-    var rOut = 8, rIn = 2;
-    var tl, tr, br, bl;
-    if (side === 'L') { tl = bl = rOut; tr = br = rIn; }
-    else if (side === 'R') { tl = bl = rIn; tr = br = rOut; }
-    else { tl = tr = br = bl = rOut; }
-    var hot = info.state.hover || info.state.selected;
-
-    ctx.save();
-    if (dim) ctx.globalAlpha = 0.28;
-    ctx.shadowColor = hot ? alpha(pal.accent, 0.4) : (dark ? 'rgba(0,0,0,0.5)' : 'rgba(15,23,42,0.12)');
-    ctx.shadowBlur = hot ? 10 : 4;
-    ctx.shadowOffsetY = 1.5;
-
-    var g = ctx.createLinearGradient(0, t, 0, t + h);
-    if (on) {
-      g.addColorStop(0, dark ? 'rgba(30,46,72,0.98)' : 'rgba(255,255,255,0.98)');
-      g.addColorStop(1, alpha(pal.accent, dark ? 0.22 : 0.13));
-    } else {
-      g.addColorStop(0, dark ? 'rgba(22,34,54,0.95)' : 'rgba(255,255,255,0.95)');
-      g.addColorStop(1, dark ? 'rgba(16,26,44,0.95)' : 'rgba(241,245,249,0.95)');
-    }
-    rrectSides(ctx, l, t, w, h, tl, tr, br, bl);
-    ctx.fillStyle = g;
-    ctx.fill();
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-
-    var bc = on ? alpha(pal.accent, hot ? 0.95 : 0.6) : (dark ? 'rgba(148,163,184,0.28)' : 'rgba(100,116,139,0.35)');
-    var bw = hot ? 2 : (on ? 1.3 : 1);
-    if (flags.hit) { bc = '#f59e0b'; bw = 2.6; }
-    if (flags.path) { bc = '#ef4444'; bw = 2.6; }
-    rrectSides(ctx, l + 0.5, t + 0.5, w - 1, h - 1, tl, tr, br, bl);
-    ctx.strokeStyle = bc;
-    ctx.lineWidth = bw;
-    ctx.stroke();
-
-    var gloss = ctx.createLinearGradient(0, t, 0, t + h / 2);
-    gloss.addColorStop(0, dark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.9)');
-    gloss.addColorStop(1, 'rgba(255,255,255,0)');
-    rrectSides(ctx, l + 1, t + 1, w - 2, h / 2, tl, tr, br, bl);
-    ctx.fillStyle = gloss;
-    ctx.fill();
-
-    var stripX = side === 'R' ? l + w - 3.2 : l + 1.2;
-    ctx.fillStyle = alpha(pal.accent, on ? 0.9 : 0.22);
-    rrect(ctx, stripX, t + 6, 2, h - 12, 1);
-    ctx.fill();
-    var ledX = side === 'R' ? l + w - 10 : l + 10;
-    ctx.beginPath();
-    ctx.arc(ledX, t + 8, 1.9, 0, 7);
-    ctx.fillStyle = on ? '#10b981' : (dark ? 'rgba(148,163,184,0.35)' : 'rgba(100,116,139,0.3)');
-    ctx.fill();
-
-    ctx.font = '600 9.5px ' + MONO;
-    if (ctx.measureText(p.label).width > w - 24) ctx.font = '600 9px ' + MONO;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = on ? (dark ? '#eaf2ff' : '#0f172a') : pal.muted;
-    ctx.fillText(clipText(ctx, p.label, w - 22), x + (side === 'R' ? -2 : 2), y + 1);
-
-    ctx.restore();
-    return { drawNode: function () {}, nodeDimensions: { width: w, height: h } };
-  }
-
 
   function drawLinePortNode(info, node, flags) {
     var ctx = info.ctx, x = info.x, y = info.y;
@@ -1815,16 +1565,14 @@
 
   function drawDeviceNode(info, node, flags) {
     if (state.style === 'shadcn') return drawShadcnDeviceNode(info, node, flags);
-    if (state.style === 'line') return drawLineDeviceNode(info, node, flags);
     if (state.style === 'skeuo') return drawSkeuoDeviceNode(info, node, flags);
-    return drawGlassDeviceNode(info, node, flags);
+    return drawLineDeviceNode(info, node, flags);
   }
 
   function drawPortNode(info, node, flags) {
     if (state.style === 'shadcn') return drawShadcnPortNode(info, node, flags);
-    if (state.style === 'line') return drawLinePortNode(info, node, flags);
     if (state.style === 'skeuo') return drawSkeuoPortNode(info, node, flags);
-    return drawGlassPortNode(info, node, flags);
+    return drawLinePortNode(info, node, flags);
   }
 
   function drawGroupStack(ctx, node, x, y) {
@@ -4840,14 +4588,14 @@
   }
 
   function setStyle(name, fromMenu) {
-    if (['shadcn', 'glass', 'line', 'skeuo'].indexOf(name) < 0) return;
+    if (['shadcn', 'line', 'skeuo'].indexOf(name) < 0) return;
     if (name === state.style) { closeStyleMenu(true); return; }
     closeStyleMenu(false);
     state.style = name;
     try { localStorage.setItem('topo-style-v3', name); } catch (e) { /* file:// 下可能不可用 */ }
     syncStyleButtons();
     rebuild({ keepCamera: true });
-    toast(name === 'shadcn' ? '节点风格：shadcn/ui' : name === 'glass' ? '节点风格：玻璃质感' : name === 'line' ? '节点风格：线稿' : '节点风格：机架拟物');
+    toast(name === 'shadcn' ? '节点风格：shadcn/ui' : name === 'line' ? '节点风格：线稿' : '节点风格：机架拟物');
     if (fromMenu) requestAnimationFrame(function () {
       var trig = $('#style-trigger');
       if (trig) trig.focus();
@@ -4892,7 +4640,7 @@
   function init() {
     try {
       var saved = localStorage.getItem('topo-style-v3');
-      if (saved === 'shadcn' || saved === 'glass' || saved === 'line' || saved === 'skeuo') state.style = saved;
+      if (saved === 'shadcn' || saved === 'line' || saved === 'skeuo') state.style = saved;
       var savedShell = localStorage.getItem('topo-shell');
       if (savedShell === 'classic' || savedShell === 'shadcn') state.shell = savedShell;
       if (localStorage.getItem('topo-sidebar-collapsed') === '1') document.body.classList.add('sidebar-collapsed');

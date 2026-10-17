@@ -1019,7 +1019,6 @@ body.shell-classic .vis-tooltip { border-radius: 10px !important; }
   border-color: #93c5fd;
   box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 3px #3b82f6;
 }
-.swatch.glass { background: linear-gradient(135deg, #e0f2fe, #bfdbfe); border-color: #93c5fd; }
 .swatch.shadcn { background: #fff; border-color: #d4d4d8; }
 .swatch.skeuo { background: linear-gradient(135deg, #475569, #0f172a); border-color: #334155; }
 body.dark .swatch.line {
@@ -1027,7 +1026,6 @@ body.dark .swatch.line {
   border-color: #60a5fa;
   box-shadow: inset 0 0 0 2px #18181b, inset 0 0 0 3px #60a5fa;
 }
-body.dark .swatch.glass { background: linear-gradient(135deg, #0c4a6e, #075985); border-color: #0ea5e9; }
 body.dark .swatch.shadcn { background: #18181b; border-color: #3f3f46; }
 body.dark .swatch.skeuo { background: linear-gradient(135deg, #64748b, #1e293b); border-color: #475569; }
 .style-popover {
