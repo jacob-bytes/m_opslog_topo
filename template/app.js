@@ -89,6 +89,7 @@
     autoBundle: true,
     sideTab: 'filter',
     layout: 'layered',
+    collapsedPlanes: new Set(),
     expandedGroups: new Set(),
     scope: 'all',
     showUnused: false,
@@ -119,7 +120,9 @@
   var edgesDS = null;
   var nodeFlags = new Map();
   var rankCols = [];
+  var planeCols = [];
   var matrix = { device: null, query: '', onlyUsed: false, rows: [] };
+  var command = { open: false, items: [], active: 0 };
   var redundancy = { data: null, query: '' };
 
   var picker = {
@@ -127,6 +130,7 @@
     tab: 'all',
     query: '',
     expanded: new Set(),
+    expandedHostGroups: new Set(),
     draft: null
   };
 
@@ -240,33 +244,114 @@
     return d.type === 'unknown' ? '未识别设备' : d.label;
   }
 
-  function deviceOnlyMatches(d, q) {
-    if (!q) return false;
-    if (String(d.label || '').toLowerCase().indexOf(q) >= 0) return true;
-    if (String(d.wwn || '').toLowerCase().indexOf(q) >= 0) return true;
-    for (var i = 0; i < d.ips.length; i++) if (String(d.ips[i]).indexOf(q) >= 0) return true;
+  var SEARCH_KEYS = {
+    site: 1, fabric: 1, rack: 1, type: 1, layer: 1, status: 1,
+    vendor: 1, model: 1, ip: 1, wwn: 1, port: 1, name: 1
+  };
+
+  function parseDeviceQuery(q) {
+    var filters = {}, text = [];
+    String(q || '').trim().split(/\s+/).forEach(function (token) {
+      var m = token.match(/^([a-z_]+):(.*)$/i);
+      if (m && SEARCH_KEYS[m[1].toLowerCase()] && m[2] !== '') {
+        var key = m[1].toLowerCase();
+        if (!filters[key]) filters[key] = [];
+        filters[key].push(m[2].toLowerCase());
+      } else if (token) {
+        text.push(token.toLowerCase());
+      }
+    });
+    return { text: text.join(' ').trim(), filters: filters };
+  }
+
+  function deviceTextMatch(d, text) {
+    if (!text) return false;
+    if (String(d.label || '').toLowerCase().indexOf(text) >= 0) return true;
+    if (String(d.wwn || '').toLowerCase().indexOf(text) >= 0) return true;
+    for (var i = 0; i < d.ips.length; i++) if (String(d.ips[i]).toLowerCase().indexOf(text) >= 0) return true;
     if (d.type === 'storage') {
       var info = storageInfo(d);
-      if (String(info.vendor).toLowerCase().indexOf(q) >= 0) return true;
-      if (String(info.model).toLowerCase().indexOf(q) >= 0) return true;
+      if (String(info.vendor).toLowerCase().indexOf(text) >= 0) return true;
+      if (String(info.model).toLowerCase().indexOf(text) >= 0) return true;
     }
+    if (String(d.meta && d.meta.fabric || '').toLowerCase().indexOf(text) >= 0) return true;
+    if (String(d.meta && d.meta.site || '').toLowerCase().indexOf(text) >= 0) return true;
     return false;
   }
 
+  function deviceFilterMatch(d, filters) {
+    function values(key) { return filters[key] || []; }
+    function metaMatch(key) {
+      var vals = values(key);
+      if (!vals.length) return true;
+      var actual = String((d.meta && d.meta[key]) || '').toLowerCase();
+      return vals.some(function (v) { return actual.indexOf(v) >= 0; });
+    }
+    if (!metaMatch('site') || !metaMatch('fabric') || !metaMatch('rack')) return false;
+    var types = values('type');
+    if (types.length && types.indexOf(String(d.type).toLowerCase()) < 0) return false;
+    var layers = values('layer');
+    if (layers.length && (d.type !== 'switch' || layers.indexOf(String(switchLayer(d))) < 0)) return false;
+    var statuses = values('status');
+    if (statuses.length) {
+      var h = deviceHealth(d);
+      var ok = statuses.some(function (v) {
+        if (v === 'abnormal' || v === 'issue') return h === 'degraded' || h === 'down';
+        if (v === 'up' || v === 'ok' || v === 'normal') return h === 'ok';
+        if (v === 'down' || v === 'offline') return h === 'down' || h === 'degraded';
+        return h === v;
+      });
+      if (!ok) return false;
+    }
+    if (d.type === 'storage') {
+      var info = storageInfo(d);
+      if (values('vendor').length && values('vendor').every(function (v) { return String(info.vendor).toLowerCase().indexOf(v) < 0; })) return false;
+      if (values('model').length && values('model').every(function (v) { return String(info.model).toLowerCase().indexOf(v) < 0; })) return false;
+    } else if (values('vendor').length || values('model').length) {
+      return false;
+    }
+    var ips = values('ip');
+    if (ips.length && !(d.ips || []).some(function (ip) { return ips.some(function (v) { return String(ip).toLowerCase().indexOf(v) >= 0; }); })) return false;
+    var wwns = values('wwn');
+    if (wwns.length && !wwns.some(function (v) { return String(d.wwn || '').toLowerCase().indexOf(v) >= 0; })) return false;
+    var ports = values('port');
+    if (ports.length && !(d.ports || []).some(function (p) {
+      var s = (String(p.label || '') + ' ' + String(p.wwn || '')).toLowerCase();
+      return ports.some(function (v) { return s.indexOf(v) >= 0; });
+    })) return false;
+    var names = values('name');
+    if (names.length && !names.some(function (v) {
+      return String(d.label || '').toLowerCase().indexOf(v) >= 0 ||
+        (d.ips || []).some(function (ip) { return String(ip).toLowerCase().indexOf(v) >= 0; });
+    })) return false;
+    return true;
+  }
+
+  function deviceOnlyMatches(d, q) {
+    var parsed = parseDeviceQuery(q);
+    if (!deviceFilterMatch(d, parsed.filters)) return false;
+    if (parsed.text) return deviceTextMatch(d, parsed.text);
+    return Object.keys(parsed.filters).length > 0;
+  }
+
   function deviceMatches(d, q) {
-    if (!q) return false;
-    if (deviceOnlyMatches(d, q)) return true;
+    var parsed = parseDeviceQuery(q);
+    if (!deviceFilterMatch(d, parsed.filters)) return false;
+    if (!parsed.text) return Object.keys(parsed.filters).length > 0;
+    if (deviceTextMatch(d, parsed.text)) return true;
     for (var j = 0; j < d.ports.length; j++) {
-      if (String(d.ports[j].label || '').toLowerCase().indexOf(q) >= 0) return true;
-      if (String(d.ports[j].wwn || '').toLowerCase().indexOf(q) >= 0) return true;
+      if (String(d.ports[j].label || '').toLowerCase().indexOf(parsed.text) >= 0) return true;
+      if (String(d.ports[j].wwn || '').toLowerCase().indexOf(parsed.text) >= 0) return true;
     }
     return false;
   }
 
   function portMatchesQuery(p, q) {
     if (!q) return false;
-    return String(p.label || '').toLowerCase().indexOf(q) >= 0 ||
-      String(p.wwn || '').toLowerCase().indexOf(q) >= 0;
+    if (/[a-z_]+:/i.test(q)) return false;
+    var text = String(q).toLowerCase();
+    return String(p.label || '').toLowerCase().indexOf(text) >= 0 ||
+      String(p.wwn || '').toLowerCase().indexOf(text) >= 0;
   }
 
   function switchLayer(d) {
@@ -1594,6 +1679,27 @@
     ctx.restore();
   }
 
+  function drawPlaneBadge(ctx, node, x, y) {
+    if (!state._planeMode || !node._ghost || !node._plane) return;
+    var color = planeAccent(node._plane);
+    var text = String(node._plane);
+    var pw = Math.max(18, 10 + ctx.measureText(text).width);
+    var ph = 13;
+    var px = x + node._w / 2 - pw / 2;
+    var py = y - node._h / 2 - 7;
+    ctx.save();
+    ctx.font = '700 8.5px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif';
+    ctx.beginPath();
+    ctx.fillStyle = color;
+    rrect(ctx, px, py, pw, ph, 6);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, px + pw / 2, py + ph / 2 + 0.4);
+    ctx.restore();
+  }
+
   function renderNode(info) {
     var node = state.nodeById.get(info.id);
     if (!node) return { drawNode: function () {}, nodeDimensions: { width: 10, height: 10 } };
@@ -1603,7 +1709,10 @@
       if (nd && nd._group) drawGroupStack(info.ctx, node, info.x, info.y);
     }
     var result = node._kind === 'device' ? drawDeviceNode(info, node, flags) : drawPortNode(info, node, flags);
-    if (node._kind === 'device') drawHealthDot(info.ctx, node, info.x, info.y);
+    if (node._kind === 'device') {
+      drawHealthDot(info.ctx, node, info.x, info.y);
+      drawPlaneBadge(info.ctx, node, info.x, info.y);
+    }
     return result;
   }
 
@@ -2094,12 +2203,13 @@
     });
 
     var allLinks = [];
+    var skipped = 0;
     links.forEach(function (l) {
       if (l.a.device === l.b.device) return;
       var pa = devicePlanes.get(l.a.device) || [];
       var pb = devicePlanes.get(l.b.device) || [];
       var common = pa.filter(function (p) { return pb.indexOf(p) >= 0; });
-      if (!common.length) return;
+      if (!common.length) { skipped++; return; }
       common.forEach(function (plane) {
         var a = clones.get(plane + '|' + l.a.device);
         var b = clones.get(plane + '|' + l.b.device);
@@ -2118,7 +2228,7 @@
     var laneList = Array.from(lanes.values())
       .filter(function (lane) { return lane.devices.length > 0; })
       .sort(function (a, b) { return planeSort(a.key, b.key); });
-    return { devices: allDevices, links: allLinks, lanes: laneList };
+    return { devices: allDevices, links: allLinks, lanes: laneList, skipped: skipped };
   }
 
   function buildDisplayLanes(devices, links, planeOrder) {
@@ -2163,7 +2273,7 @@
         maxY = Math.max(maxY, p.y + p.h / 2);
       });
       if (!isFinite(minY) || !isFinite(maxY)) return;
-      var top = cursor + 38;
+      var top = cursor + 58;
       var offset = top - minY;
       L.pos.forEach(function (p, id) {
         out.pos.set(id, { x: p.x, y: p.y + offset, h: p.h, compact: p.compact });
@@ -2173,7 +2283,7 @@
       });
       L.sides.forEach(function (v, id) { out.sides.set(id, v); });
       L.heights.forEach(function (v, id) { out.heights.set(id, v); });
-      var bandTop = top - 30;
+      var bandTop = top - 50;
       var bandBottom = top + (maxY - minY) + 12;
       out.lanes.push({
         key: lane.key,
@@ -2240,12 +2350,26 @@
     var planeLanes = null;
     var displayDevices = devices;
     var displayLinks = links;
+    state._planeSkipped = 0;
     if (state.layout === 'plane' && state.gran === 'device' && hasPlaneMeta()) {
       var planeView = buildPlaneView(devices, links);
-      if (planeView.lanes.length) {
-        displayDevices = planeView.devices;
-        displayLinks = planeView.links;
-        planeLanes = planeView.lanes;
+      state._planeSkipped = planeView.skipped || 0;
+      var visiblePlanes = planeView.lanes.filter(function (lane) {
+        return !state.collapsedPlanes.has(lane.key);
+      });
+      if (visiblePlanes.length) {
+        var laneKeys = new Set(visiblePlanes.map(function (lane) { return lane.key; }));
+        displayDevices = planeView.devices.filter(function (d) { return laneKeys.has(d._plane); });
+        displayLinks = planeView.links.filter(function (l) {
+          var a = devById.get(l.a.device), b = devById.get(l.b.device);
+          return a && b && laneKeys.has(a._plane) && laneKeys.has(b._plane);
+        });
+        planeLanes = visiblePlanes;
+        state._planeMode = true;
+      } else {
+        displayDevices = [];
+        displayLinks = [];
+        planeLanes = [];
         state._planeMode = true;
       }
     }
@@ -2285,6 +2409,7 @@
         _kind: 'device',
         _device: isGroup ? d.id : (d._realId || d.id),
         _plane: d._plane || null,
+        _ghost: !!(d._realId && !isGroup),
         _type: d.type,
         _w: isGroup ? COMPACT_W : (p.compact ? COMPACT_W : CARD_W),
         _h: isGroup ? COMPACT_H : p.h,
@@ -2553,6 +2678,9 @@
     if (!overlay) return;
     overlay.innerHTML = '';
     rankCols = [];
+    planeCols = [];
+    var nodeByDisplay = new Map();
+    state.nodes.forEach(function (n) { nodeByDisplay.set(n.id, n); });
     view.layout.lanes.forEach(function (lane) {
       var nodes = state.nodes.filter(function (n) { return n._plane === lane.key; });
       if (!nodes.length) return;
@@ -2565,11 +2693,18 @@
       });
       var groupCount = lane.devices.filter(function (d) { return !!d._group; }).length;
       var count = groupCount ? groupCount + ' 组主机' : (lane.hostCount ? lane.hostCount + ' 台主机' : lane.count + ' 个节点');
+      var warn = lane.devices.filter(function (d) {
+        var h = deviceHealth(d);
+        return h === 'degraded' || h === 'down';
+      }).length;
+      if (warn) count += ' · ' + warn + ' 异常';
       var band = document.createElement('div');
       band.className = 'rank-band plane ' + planeClass(lane.key);
       var label = document.createElement('div');
       label.className = 'rank-label plane-label ' + planeClass(lane.key);
-      label.innerHTML = '<i class="dot"></i>' + esc(lane.label) + ' <span>' + esc(count) + '</span>';
+      label.setAttribute('data-plane', lane.key);
+      label.setAttribute('title', '点击折叠' + lane.label);
+      label.innerHTML = '<i class="dot"></i>' + esc(lane.label) + ' <span>' + esc(count) + '</span><span class="plane-collapse">−</span>';
       overlay.appendChild(band);
       overlay.appendChild(label);
       rankCols.push({
@@ -2582,7 +2717,35 @@
         minX: minX - 18, maxX: maxX + 18,
         minY: lane.minY, maxY: lane.maxY
       });
+
+      var colMap = new Map();
+      lane.devices.forEach(function (d) {
+        var n = nodeByDisplay.get(d.id);
+        if (!n) return;
+        var r = view.ranks && view.ranks.get(d.id);
+        if (r == null) r = Math.round(n.x);
+        if (!colMap.has(r)) colMap.set(r, []);
+        colMap.get(r).push({ d: d, n: n });
+      });
+      colMap.forEach(function (items) {
+        if (!items.length) return;
+        var devices = items.map(function (x) { return x.d; });
+        var meta = rankColumnMeta(devices);
+        var cx = items.reduce(function (sum, x) { return sum + x.n.x; }, 0) / items.length;
+        var el = document.createElement('div');
+        el.className = 'rank-label plane-col ' + meta.cls;
+        el.textContent = meta.label;
+        el.title = meta.label + ' · ' + meta.count;
+        overlay.appendChild(el);
+        planeCols.push({
+          label: el,
+          x: cx,
+          y: lane.minY + 26,
+          laneKey: lane.key
+        });
+      });
     });
+    updateRankOverlay();
   }
 
   function setupRankOverlay(view) {
@@ -2590,6 +2753,7 @@
     if (!overlay) return;
     overlay.innerHTML = '';
     rankCols = [];
+    planeCols = [];
     if (!view || !view.layout || !state.nodes.length) return;
     if (view.layout.lanes && view.layout.lanes.length) {
       setupPlaneOverlay(view);
@@ -2692,6 +2856,17 @@
       ctx.fillText(c.meta.count, tx + tw + gap, ly + lh / 2 + 0.5 * u);
       ctx.restore();
     });
+    planeCols.forEach(function (c) {
+      var p = net.canvasToDOM({ x: c.x, y: c.y });
+      var x = p.x * k, y = p.y * k;
+      ctx.save();
+      ctx.font = '500 ' + (9 * u) + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif';
+      ctx.fillStyle = state.theme === 'dark' ? '#a1a1aa' : '#71717a';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(c.label.textContent, x, y);
+      ctx.restore();
+    });
   }
 
   function updateRankOverlay() {
@@ -2721,6 +2896,11 @@
           c.label.style.top = Math.max(6, top - 23) + 'px';
         }
       }
+    });
+    planeCols.forEach(function (c) {
+      var p = local(network.canvasToDOM({ x: c.x, y: c.y }));
+      c.label.style.left = p.x + 'px';
+      c.label.style.top = p.y + 'px';
     });
   }
 
@@ -2988,6 +3168,11 @@
     }
     if (state.onlyUp) chips.push({ key: 'onlyup', html: '仅在线链路' });
     if (state.scope !== 'all') chips.push({ key: 'scope', html: '范围 <b>' + esc(scopeLabel()) + '</b>' });
+    if (state.layout === 'plane' && hasPlaneMeta()) {
+      state.collapsedPlanes.forEach(function (key) {
+        chips.push({ key: 'plane:' + key, html: '<b>' + esc(planeLabelFor(key)) + '</b> 已折叠' });
+      });
+    }
     if (state.collapseHosts && state.gran === 'device') chips.push({ key: 'collapse', html: '主机已折叠' });
     if (state.gran === 'device' && state._autoBundled) chips.push({ key: 'auto-bundle', html: '链路过多 · 已自动聚合' });
     if (state.collapseHosts && state.gran === 'device' && state.expandedGroups.size) {
@@ -3045,7 +3230,8 @@
         ? '当前数据没有 meta.fabric，网络平面布局不可用。'
         : (state.gran !== 'device'
           ? '网络平面布局仅设备视图可用。'
-          : '按 meta.fabric 分带；共享设备会复制到多个平面。');
+          : '按 meta.fabric 分带；共享设备会复制到多个平面。' +
+          (state._planeSkipped ? '；' + state._planeSkipped + ' 条跨平面链路未显示' : ''));
     }
   }
 
@@ -3060,6 +3246,137 @@
     try { localStorage.setItem('topo-layout', state.layout); } catch (e) { /* ignore */ }
     syncLayoutButtons();
     rebuild();
+  }
+
+  var PRESET_KEY = 'topo-view-presets-v1';
+  var presets = [];
+
+  function loadPresets() {
+    try {
+      var raw = localStorage.getItem(PRESET_KEY);
+      var parsed = raw ? JSON.parse(raw) : [];
+      presets = Array.isArray(parsed) ? parsed : [];
+    } catch (e) { presets = []; }
+  }
+
+  function persistPresets() {
+    try { localStorage.setItem(PRESET_KEY, JSON.stringify(presets.slice(0, 8))); } catch (e) { /* ignore */ }
+  }
+
+  function presetSnapshot(name) {
+    return {
+      id: String(Date.now()) + '-' + Math.random().toString(36).slice(2, 6),
+      name: name,
+      savedAt: new Date().toISOString(),
+      types: Object.assign({}, state.types),
+      kinds: Object.assign({}, state.kinds),
+      offDevices: Array.from(state.offDevices),
+      offPorts: Array.from(state.offPorts),
+      hiddenLayers: Array.from(state.hiddenLayers),
+      scope: state.scope,
+      onlyUp: state.onlyUp,
+      hideIsolated: state.hideIsolated,
+      collapseHosts: state.collapseHosts,
+      autoBundle: state.autoBundle,
+      layout: state.layout,
+      gran: state.gran,
+      spacing: state.spacing,
+      showUnused: state.showUnused,
+      showWwn: state.showWwn,
+      query: state.query,
+      isolateQuery: state.isolateQuery,
+      style: state.style,
+      shell: state.shell,
+      theme: state.theme,
+      collapsedPlanes: Array.from(state.collapsedPlanes)
+    };
+  }
+
+  function savePreset() {
+    var input = $('#preset-name');
+    var name = (input && input.value || '').trim();
+    if (!name) name = '视图 ' + (presets.length + 1);
+    presets = presets.filter(function (p) { return p.name !== name; });
+    presets.unshift(presetSnapshot(name));
+    presets = presets.slice(0, 8);
+    persistPresets();
+    renderPresets();
+    if (input) input.value = '';
+    toast('已保存视图预设：' + name);
+  }
+
+  function applyPreset(id) {
+    var p = presets.filter(function (x) { return x.id === id; })[0];
+    if (!p) return;
+    state.types = Object.assign({ host: true, switch: true, storage: true, unknown: true }, p.types || {});
+    state.kinds = Object.assign({ host: true, switch: true, storage: true, unknown: true, other: true }, p.kinds || {});
+    state.offDevices = new Set(p.offDevices || []);
+    state.offPorts = new Set(p.offPorts || []);
+    state.hiddenLayers = new Set(p.hiddenLayers || []);
+    state.scope = p.scope || 'all';
+    state.onlyUp = !!p.onlyUp;
+    state.hideIsolated = p.hideIsolated !== false;
+    state.collapseHosts = !!p.collapseHosts;
+    state.autoBundle = p.autoBundle !== false;
+    state.gran = p.gran === 'port' ? 'port' : 'device';
+    state.layout = p.layout === 'plane' && state.gran === 'device' && hasPlaneMeta() ? 'plane' : 'layered';
+    state.spacing = Number(p.spacing) || 1;
+    state.showUnused = !!p.showUnused;
+    state.showWwn = !!p.showWwn;
+    state.query = p.query || '';
+    state.isolateQuery = !!p.isolateQuery;
+    state.style = ['line', 'shadcn', 'skeuo'].indexOf(p.style) >= 0 ? p.style : 'line';
+    state.shell = p.shell === 'shadcn' ? 'shadcn' : 'classic';
+    state.theme = p.theme === 'dark' ? 'dark' : 'light';
+    state.collapsedPlanes = new Set(p.collapsedPlanes || []);
+    state.expandedGroups.clear();
+    state.pathMode = false;
+    state.pathSel = [];
+    state.current = null;
+    document.body.classList.toggle('dark', state.theme === 'dark');
+    applyShell(state.shell);
+    $('#search').value = state.query;
+    $('#isolate-search').checked = state.isolateQuery;
+    $('#only-up').checked = state.onlyUp;
+    $('#hide-isolated').checked = state.hideIsolated;
+    $('#show-unused').checked = state.showUnused;
+    $('#show-wwn').checked = state.showWwn;
+    $('#collapse-hosts').checked = state.collapseHosts;
+    $('#auto-bundle').checked = state.autoBundle;
+    $('#spacing').value = String(state.spacing);
+    $('#scope-select').value = state.scope;
+    syncTypeCheckboxes();
+    $$('#kind-filters input').forEach(function (cb) { cb.checked = !!state.kinds[cb.value]; });
+    $$('#gran button').forEach(function (b) { b.classList.toggle('active', b.dataset.gran === state.gran); });
+    $('#gran-hint').textContent = state.gran === 'port'
+      ? '展开每台设备的每个网口，连线表示端口之间的实际链路。'
+      : '按设备查看结构，多网口聚合为一条链路。';
+    syncStyleButtons();
+    syncLayoutButtons();
+    updatePathUI();
+    rebuild();
+    toast('已应用视图预设：' + p.name);
+  }
+
+  function deletePreset(id) {
+    presets = presets.filter(function (p) { return p.id !== id; });
+    persistPresets();
+    renderPresets();
+  }
+
+  function renderPresets() {
+    var list = $('#preset-list');
+    if (!list) return;
+    if (!presets.length) {
+      list.innerHTML = '<div class="preset-row"><span class="preset-empty">还没有保存的视图预设</span></div>';
+      return;
+    }
+    list.innerHTML = presets.map(function (p) {
+      return '<div class="preset-row" data-preset-id="' + esc(p.id) + '">' +
+        '<span class="preset-name" title="' + esc(p.name) + '">' + esc(p.name) + '</span>' +
+        '<button type="button" data-preset-apply="' + esc(p.id) + '">应用</button>' +
+        '<button type="button" data-preset-delete="' + esc(p.id) + '" aria-label="删除">×</button></div>';
+    }).join('');
   }
 
   function setSideTab(name, focus) {
@@ -3151,6 +3468,7 @@
     picker.tab = tab || 'all';
     picker.query = '';
     picker.expanded = new Set();
+    picker.expandedHostGroups = new Set();
     if (expandAll) {
       G.devices.forEach(function (d) { if (d.ports.length) picker.expanded.add(d.id); });
     }
@@ -3234,6 +3552,108 @@
     renderPicker();
   }
 
+  function pickerHostPrimaryMap() {
+    var hostSwitches = new Map();
+    allLinks.forEach(function (l) {
+      var a = devById.get(l.a.device), b = devById.get(l.b.device);
+      if (!a || !b) return;
+      if (a.type === 'host' && b.type === 'switch') {
+        if (!hostSwitches.has(a.id)) hostSwitches.set(a.id, []);
+        hostSwitches.get(a.id).push(b);
+      } else if (b.type === 'host' && a.type === 'switch') {
+        if (!hostSwitches.has(b.id)) hostSwitches.set(b.id, []);
+        hostSwitches.get(b.id).push(a);
+      }
+    });
+    var out = new Map();
+    hostSwitches.forEach(function (sws, hostId) {
+      sws = sws.slice().sort(function (a, b) { return a.label.localeCompare(b.label, 'zh-Hans-CN'); });
+      if (sws.length) out.set(hostId, sws[0].id);
+    });
+    return out;
+  }
+
+  function pickerHostGroupsFor(list) {
+    var primary = pickerHostPrimaryMap();
+    var map = new Map();
+    var flat = [];
+    list.forEach(function (x) {
+      var sw = x.d.type === 'host' ? primary.get(x.d.id) : null;
+      if (!sw) { flat.push(x); return; }
+      if (!map.has(sw)) map.set(sw, []);
+      map.get(sw).push(x);
+    });
+    var groups = [];
+    map.forEach(function (members, swId) {
+      if (members.length < 2) {
+        members.forEach(function (x) { flat.push(x); });
+        return;
+      }
+      var sw = devById.get(swId);
+      groups.push({
+        key: 'host:' + swId,
+        label: sw ? sw.label : swId,
+        members: members
+      });
+    });
+    groups.sort(function (a, b) { return a.label.localeCompare(b.label, 'zh-Hans-CN'); });
+    flat.sort(function (a, b) { return a.d.label.localeCompare(b.d.label, 'zh-Hans-CN'); });
+    return { groups: groups, flat: flat };
+  }
+
+  function pickerRowHtml(x, q, draft) {
+    var d = x.d;
+    var st = deviceTriState(d);
+    var open = picker.expanded.has(d.id) || (q && x.portHits.length && !x.devHit);
+    var ports = d.ports;
+    var shownPorts = (q && !x.devHit) ? x.portHits : ports;
+    if (q && x.devHit) shownPorts = ports;
+    var onPorts = ports.filter(function (p) { return !draft.offPorts.has(p.id); }).length;
+    var countText = ports.length ? onPorts + '/' + ports.length : '—';
+    var meta;
+    if (d.type === 'switch') meta = 'L' + switchLayer(d) + ' · ' + d.ports.length + ' 口' + (d.ips && d.ips.length ? ' · ' + d.ips[0] : '');
+    else if (d.type === 'storage') meta = storageInfo(d).model + ' · ' + d.ports.length + ' 个网口';
+    else meta = d.ports.length + ' 个网口' + (d.ips && d.ips.length ? ' · ' + d.ips[0] : '');
+    if (d.type === 'unknown') meta = shortWwn(d.wwn) + ' · config.txt 中无记录';
+
+    var ariaState = st === 'all' ? 'true' : (st === 'some' ? 'mixed' : 'false');
+    var html = '<div class="pick-dev' + (st === 'none' ? ' off' : '') + '" data-dev-row="' + esc(d.id) + '">' +
+      '<button class="caret' + (open ? ' open' : '') + '" data-caret="' + esc(d.id) + '" aria-label="展开">▶</button>' +
+      '<span class="cb ' + st + '" role="checkbox" tabindex="0" aria-checked="' + ariaState + '" data-dev-toggle="' + esc(d.id) + '"></span>' +
+      '<span class="dev-ico ' + d.type + '">' + TYPE_ICON[d.type] + '</span>' +
+      '<div class="dev-info"><div class="dev-name">' + esc(d.type === 'unknown' ? '未识别设备' : d.label) + '</div>' +
+      '<div class="dev-meta">' + esc(meta) + '</div></div>' +
+      '<span class="dev-count">' + countText + '</span></div>';
+
+    if (open && shownPorts.length) {
+      html += '<div class="pick-ports">' + shownPorts.map(function (p) {
+        var pon = !draft.offDevices.has(d.id) && draft.types[d.type] && !draft.offPorts.has(p.id);
+        return '<div class="pick-port" role="checkbox" tabindex="0" aria-checked="' + (pon ? 'true' : 'false') + '" data-port-toggle="' + esc(p.id) + '">' +
+          '<span class="cb mini ' + (pon ? 'all' : 'none') + '"></span>' +
+          '<span class="p-name">' + esc(p.label) + '</span>' +
+          '<span class="p-wwn">' + esc(p.wwn || '') + '</span>' +
+          '<span class="p-dot' + (p.connected ? ' on' : '') + '" title="' + (p.connected ? '已连接' : '未连接') + '"></span></div>';
+      }).join('') + '</div>';
+    }
+    return html;
+  }
+
+  function pickerHostGroupAll(key, on) {
+    var swId = key.slice(5);
+    var primary = pickerHostPrimaryMap();
+    G.devices.forEach(function (d) {
+      if (d.type !== 'host' || primary.get(d.id) !== swId) return;
+      if (on) {
+        picker.draft.types.host = true;
+        picker.draft.offDevices.delete(d.id);
+        d.ports.forEach(function (p) { picker.draft.offPorts.delete(p.id); });
+      } else {
+        picker.draft.offDevices.add(d.id);
+      }
+    });
+    renderPicker();
+  }
+
   function pickerGroupHtml(type) {
     var draft = picker.draft;
     var q = picker.query.trim().toLowerCase();
@@ -3244,7 +3664,6 @@
 
     var onCount = 0;
     list.forEach(function (x) { if (!draft.offDevices.has(x.d.id) && draft.types[type]) onCount++; });
-
     var html = '<div class="pick-group">';
     html += '<div class="pick-group-head">' + TYPE_LABEL[type] +
       '<span>' + onCount + '/' + list.length + ' 台</span>' +
@@ -3254,40 +3673,31 @@
       '<span class="sep">·</span>' +
       '<button class="link-btn" data-group-none="' + type + '" title="' + (q ? '隐藏匹配的设备' : '隐藏该类型全部设备') + '">' + batchNone + '</button></div>';
 
-    list.forEach(function (x) {
-      var d = x.d;
-      var st = deviceTriState(d);
-      var open = picker.expanded.has(d.id) || (q && x.portHits.length && !x.devHit);
-      var ports = d.ports;
-      var shownPorts = (q && !x.devHit) ? x.portHits : ports;
-      if (q && x.devHit) shownPorts = ports;
-      var onPorts = ports.filter(function (p) { return !draft.offPorts.has(p.id); }).length;
-      var countText = ports.length ? onPorts + '/' + ports.length : '—';
-      var meta;
-      if (d.type === 'switch') meta = 'L' + switchLayer(d) + ' · ' + d.ports.length + ' 口' + (d.ips && d.ips.length ? ' · ' + d.ips[0] : '');
-      else if (d.type === 'storage') meta = storageInfo(d).model + ' · ' + d.ports.length + ' 个网口';
-      else meta = d.ports.length + ' 个网口' + (d.ips && d.ips.length ? ' · ' + d.ips[0] : '');
-      if (d.type === 'unknown') meta = shortWwn(d.wwn) + ' · config.txt 中无记录';
-
-      var ariaState = st === 'all' ? 'true' : (st === 'some' ? 'mixed' : 'false');
-      html += '<div class="pick-dev' + (st === 'none' ? ' off' : '') + '" data-dev-row="' + esc(d.id) + '">' +
-        '<button class="caret' + (open ? ' open' : '') + '" data-caret="' + esc(d.id) + '" aria-label="展开">▶</button>' +
-        '<span class="cb ' + st + '" role="checkbox" tabindex="0" aria-checked="' + ariaState + '" data-dev-toggle="' + esc(d.id) + '"></span>' +
-        '<span class="dev-ico ' + d.type + '">' + TYPE_ICON[d.type] + '</span>' +
-        '<div class="dev-info"><div class="dev-name">' + esc(d.type === 'unknown' ? '未识别设备' : d.label) + '</div>' +
-        '<div class="dev-meta">' + esc(meta) + '</div></div>' +
-        '<span class="dev-count">' + countText + '</span></div>';
-
-      if (open && shownPorts.length) {
-        html += '<div class="pick-ports">' + shownPorts.map(function (p) {
-          var pon = !draft.offDevices.has(d.id) && draft.types[d.type] && !draft.offPorts.has(p.id);
-          return '<div class="pick-port" role="checkbox" tabindex="0" aria-checked="' + (pon ? 'true' : 'false') + '" data-port-toggle="' + esc(p.id) + '">' +
-            '<span class="cb mini ' + (pon ? 'all' : 'none') + '"></span>' +
-            '<span class="p-name">' + esc(p.label) + '</span>' +
-            '<span class="p-wwn">' + esc(p.wwn || '') + '</span>' +
-            '<span class="p-dot' + (p.connected ? ' on' : '') + '" title="' + (p.connected ? '已连接' : '未连接') + '"></span></div>';
-        }).join('') + '</div>';
-      }
+    var grouping = type === 'host' && G.devices.filter(function (d) { return d.type === 'host'; }).length >= 20;
+    var grouped = grouping ? pickerHostGroupsFor(list) : null;
+    if (grouped && grouped.groups.length) {
+      grouped.groups.forEach(function (g) {
+        var open = picker.expandedHostGroups.has(g.key) || !!q;
+        var on = g.members.filter(function (x) { return !draft.offDevices.has(x.d.id) && draft.types.host; }).length;
+        html += '<div class="pick-host-group">' +
+          '<div class="pick-host-head" data-host-group="' + esc(g.key) + '">' +
+          '<button class="caret' + (open ? ' open' : '') + '" data-host-caret="' + esc(g.key) + '" aria-label="展开主机组">▶</button>' +
+          '<span class="host-group-name">按接入交换机 · ' + esc(g.label) + '</span>' +
+          '<span class="host-group-count">' + on + '/' + g.members.length + '</span>' +
+          '<span class="grow"></span>' +
+          '<button class="link-btn" data-host-group-all="' + esc(g.key) + '">全选</button>' +
+          '<span class="sep">·</span>' +
+          '<button class="link-btn" data-host-group-none="' + esc(g.key) + '">清空</button></div>';
+        if (open) {
+          html += '<div class="pick-host-members">' + g.members.map(function (x) {
+            return pickerRowHtml(x, q, draft);
+          }).join('') + '</div>';
+        }
+        html += '</div>';
+      });
+    }
+    (grouped ? grouped.flat : list).forEach(function (x) {
+      html += pickerRowHtml(x, q, draft);
     });
 
     html += '</div>';
@@ -3407,6 +3817,28 @@
 
   function pickerEvent(e) {
     var t = e.target;
+    var hga = t.closest('[data-host-group-all]');
+    if (hga) { pickerHostGroupAll(hga.getAttribute('data-host-group-all'), true); return; }
+    var hgn = t.closest('[data-host-group-none]');
+    if (hgn) { pickerHostGroupAll(hgn.getAttribute('data-host-group-none'), false); return; }
+    var hgc = t.closest('[data-host-caret]');
+    if (hgc) {
+      var hk = hgc.getAttribute('data-host-caret');
+      if (picker.expandedHostGroups.has(hk)) picker.expandedHostGroups.delete(hk);
+      else picker.expandedHostGroups.add(hk);
+      renderPicker();
+      refocusPick('data-host-caret', hk);
+      return;
+    }
+    var hgh = t.closest('[data-host-group]');
+    if (hgh) {
+      var hgk = hgh.getAttribute('data-host-group');
+      if (picker.expandedHostGroups.has(hgk)) picker.expandedHostGroups.delete(hgk);
+      else picker.expandedHostGroups.add(hgk);
+      renderPicker();
+      refocusPick('data-host-caret', hgk);
+      return;
+    }
     var caret = t.closest('[data-caret]');
     if (caret) {
       var cid = caret.getAttribute('data-caret');
@@ -3589,9 +4021,24 @@
     $('#matrix-count').textContent = matrix.rows.length + ' 行';
   }
 
+  function populateRedFail() {
+    var sel = $('#red-fail');
+    if (!sel) return;
+    var switches = Array.from(state.view.devices).map(function (id) { return devById.get(id); })
+      .filter(function (d) { return d && d.type === 'switch'; })
+      .sort(function (a, b) { return a.label.localeCompare(b.label, 'zh-Hans-CN'); });
+    sel.innerHTML = '<option value="">模拟故障：无</option>' + switches.map(function (d) {
+      return '<option value="' + esc(d.id) + '">移除 ' + esc(d.label) + '</option>';
+    }).join('');
+    sel.disabled = !switches.length;
+    sel.value = '';
+  }
+
   function openRedundancy() {
     closeSummary(false);
     redundancy.query = '';
+    redundancy.base = null;
+    redundancy.exclude = null;
     $('#red-search').value = '';
     $('#red-title').textContent = '冗余分析';
     $('#red-sub').textContent = '正在计算…';
@@ -3599,12 +4046,18 @@
     $('#red-body').innerHTML = '<tr><td colspan="2" class="red-empty">正在计算主机到存储的独立路径…</td></tr>';
     $('#red-summary').textContent = '';
     $('#red-count').textContent = '';
+    $('#red-impact').classList.add('hidden');
+    $('#red-detail').classList.add('hidden');
+    populateRedFail();
     $('#redundancy').classList.remove('hidden');
-    setTimeout(computeRedundancy, 30);
+    setTimeout(function () { computeRedundancy(null); }, 30);
   }
 
-  function computeRedundancy() {
-    var devices = Array.from(state.view.devices).map(function (id) { return devById.get(id); }).filter(Boolean);
+  function computeRedundancy(excludeId) {
+    excludeId = excludeId || null;
+    redundancy.exclude = excludeId;
+    var devices = Array.from(state.view.devices).map(function (id) { return devById.get(id); })
+      .filter(function (d) { return d && d.id !== excludeId; });
     var hosts = devices.filter(function (d) { return d.type === 'host'; })
       .sort(function (a, b) { return a.label.localeCompare(b.label, 'zh-Hans-CN'); });
     var storages = devices.filter(function (d) { return d.type === 'storage'; })
@@ -3640,6 +4093,7 @@
     state.view.links.forEach(function (l) {
       if (l.a.device === l.b.device) return;
       if (!idx.has(l.a.device) || !idx.has(l.b.device)) return;
+      if (excludeId && (l.a.device === excludeId || l.b.device === excludeId)) return;
       if (linkHealth(l) === 'down') return;
       var ia = idx.get(l.a.device), ib = idx.get(l.b.device);
       addEdge(ia * 2 + 1, ib * 2, 1);
@@ -3700,8 +4154,30 @@
       paths.push(row);
     });
     redundancy.data = { hosts: hosts, storages: storages, paths: paths, p2: p2, p1: p1, p0: p0 };
-    $('#red-sub').textContent = hosts.length + ' 台主机 × ' + storages.length + ' 套存储（SAN/NAS）';
+    if (!excludeId) redundancy.base = redundancy.data;
+    var failDev = excludeId ? devById.get(excludeId) : null;
+    $('#red-sub').textContent = hosts.length + ' 台主机 × ' + storages.length + ' 套存储（SAN/NAS）' +
+      (failDev ? ' · 已模拟移除 ' + failDev.label : '');
     $('#red-summary').innerHTML = '双路径 <b>' + p2 + '</b> 对 · 单路径 <b>' + p1 + '</b> 对 · 无路径 <b>' + p0 + '</b> 对';
+    var impact = $('#red-impact');
+    if (impact) {
+      if (excludeId && redundancy.base) {
+        var base = redundancy.base;
+        var reduced = 0, lost = 0;
+        for (var hi = 0; hi < paths.length; hi++) {
+          for (var si = 0; si < paths[hi].length; si++) {
+            if (paths[hi][si] < base.paths[hi][si]) reduced++;
+            if (base.paths[hi][si] > 0 && paths[hi][si] === 0) lost++;
+          }
+        }
+        impact.innerHTML = '模拟移除 <b>' + esc(failDev ? failDev.label : excludeId) + '</b>：' +
+          '<b>' + reduced + '</b> 对路径减少，<b>' + lost + '</b> 对中断';
+        impact.classList.remove('hidden');
+      } else {
+        impact.classList.add('hidden');
+      }
+    }
+    $('#red-detail').classList.add('hidden');
     renderRedundancy();
   }
 
@@ -3723,7 +4199,7 @@
       var cells = data.paths[hi].map(function (count, si) {
         var cls = count >= 2 ? 'p2' : (count === 1 ? 'p1' : 'p0');
         var label = count >= 2 ? '2' : (count === 1 ? '1' : '—');
-        return '<td class="red-cell ' + cls + '" title="' + esc(h.label + ' → ' + data.storages[si].label + '：' + count + ' 条节点不交路径') + '">' + label + '</td>';
+        return '<td class="red-cell ' + cls + '" data-red-cell="1" data-hi="' + hi + '" data-si="' + si + '" title="' + esc(h.label + ' → ' + data.storages[si].label + '：' + count + ' 条节点不交路径；点击查看路径') + '">' + label + '</td>';
       }).join('');
       var ip = h.ips && h.ips.length ? '<small>' + esc(h.ips[0]) + '</small>' : '';
       return '<tr><td class="red-host" title="' + esc(h.label) + '">' + esc(h.label) + ip + '</td>' + cells + '</tr>';
@@ -3731,6 +4207,71 @@
     if (!html) html = '<tr><td class="red-empty" colspan="' + (data.storages.length + 1) + '">没有匹配的主机</td></tr>';
     $('#red-body').innerHTML = html;
     $('#red-count').textContent = rows.length + ' / ' + data.hosts.length + ' 台主机 · ' + data.storages.length + ' 套存储';
+  }
+
+  function redundancyPaths(host, storage, excludeId) {
+    var adj = new Map();
+    state.view.links.forEach(function (l) {
+      if (excludeId && (l.a.device === excludeId || l.b.device === excludeId)) return;
+      if (linkHealth(l) === 'down') return;
+      if (!adj.has(l.a.device)) adj.set(l.a.device, []);
+      if (!adj.has(l.b.device)) adj.set(l.b.device, []);
+      adj.get(l.a.device).push(l.b.device);
+      adj.get(l.b.device).push(l.a.device);
+    });
+    function bfs(avoid) {
+      var prev = new Map([[host.id, null]]);
+      var queue = [host.id];
+      for (var qi = 0; qi < queue.length; qi++) {
+        var cur = queue[qi];
+        if (cur === storage.id) break;
+        var nbrs = adj.get(cur) || [];
+        for (var i = 0; i < nbrs.length; i++) {
+          var nb = nbrs[i];
+          if (prev.has(nb)) continue;
+          if (avoid.has(nb)) continue;
+          prev.set(nb, cur);
+          queue.push(nb);
+        }
+      }
+      if (!prev.has(storage.id)) return null;
+      var out = [];
+      var cur2 = storage.id;
+      while (cur2 != null) { out.unshift(cur2); cur2 = prev.get(cur2); }
+      return out;
+    }
+    var p1 = bfs(new Set());
+    if (!p1) return [];
+    var used = new Set();
+    p1.forEach(function (id) {
+      var d = devById.get(id);
+      if (d && d.type === 'switch') used.add(id);
+    });
+    var p2 = bfs(used);
+    var out = [p1];
+    if (p2) out.push(p2);
+    return out;
+  }
+
+  function renderRedDetail(hi, si) {
+    var data = redundancy.data;
+    if (!data || !data.hosts[hi] || !data.storages[si]) return;
+    var host = data.hosts[hi], storage = data.storages[si];
+    var paths = redundancyPaths(host, storage, redundancy.exclude);
+    var box = $('#red-detail');
+    var rows = paths.map(function (path, i) {
+      return '<div class="red-path"><span>路径 ' + (i + 1) + '：</span>' +
+        path.map(function (id) {
+          var d = devById.get(id);
+          return '<span class="rp-node">' + esc(d ? d.label : id) + '</span>';
+        }).join('<span class="rp-arrow">→</span>') + '</div>';
+    }).join('');
+    if (!paths.length) rows = '<div class="red-path"><span class="rp-no">无可用路径</span></div>';
+    box.innerHTML = '<div class="red-detail-head">' +
+      '<b>' + esc(host.label) + ' → ' + esc(storage.label) + '</b>' +
+      '<span>' + paths.length + ' 条节点不交路径</span>' +
+      '<button class="close-btn" data-red-detail-close="1" aria-label="关闭路径详情">×</button></div>' + rows;
+    box.classList.remove('hidden');
   }
 
   function closeRedundancy() {
@@ -4097,6 +4638,7 @@
     state.collapseHosts = false;
     state.autoBundle = true;
     state.expandedGroups.clear();
+    state.collapsedPlanes.clear();
     state.scope = 'all';
     state.isolateQuery = false;
     state.query = '';
@@ -4259,6 +4801,32 @@
         if (btn && !btn.disabled) setLayout(btn.getAttribute('data-layout'));
       });
     }
+    var presetSave = $('#preset-save');
+    if (presetSave) presetSave.addEventListener('click', savePreset);
+    var presetName = $('#preset-name');
+    if (presetName) presetName.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); savePreset(); }
+    });
+    var presetList = $('#preset-list');
+    if (presetList) presetList.addEventListener('click', function (e) {
+      var apply = e.target.closest('[data-preset-apply]');
+      if (apply) { applyPreset(apply.getAttribute('data-preset-apply')); return; }
+      var del = e.target.closest('[data-preset-delete]');
+      if (del) { deletePreset(del.getAttribute('data-preset-delete')); return; }
+    });
+
+    var rankOverlay = $('#rank-overlay');
+    if (rankOverlay) {
+      rankOverlay.addEventListener('click', function (e) {
+        var lane = e.target.closest('[data-plane]');
+        if (!lane || !state._planeMode) return;
+        var key = lane.getAttribute('data-plane');
+        if (!key) return;
+        if (state.collapsedPlanes.has(key)) state.collapsedPlanes.delete(key);
+        else state.collapsedPlanes.add(key);
+        rebuild();
+      });
+    }
 
     $('#search').addEventListener('input', onSearch);
 
@@ -4371,6 +4939,20 @@
     });
     var redCsv = $('#red-csv');
     if (redCsv) redCsv.addEventListener('click', exportRedundancyCsv);
+    var redFail = $('#red-fail');
+    if (redFail) redFail.addEventListener('change', function (e) {
+      computeRedundancy(e.target.value || null);
+    });
+    var redBody = $('#red-body');
+    if (redBody) redBody.addEventListener('click', function (e) {
+      var cell = e.target.closest('[data-red-cell]');
+      if (!cell) return;
+      renderRedDetail(Number(cell.getAttribute('data-hi')), Number(cell.getAttribute('data-si')));
+    });
+    var redDetail = $('#red-detail');
+    if (redDetail) redDetail.addEventListener('click', function (e) {
+      if (e.target.closest('[data-red-detail-close]')) redDetail.classList.add('hidden');
+    });
 
     var exportTrigger = $('#btn-export');
     if (exportTrigger) {
@@ -4428,6 +5010,7 @@
       state.collapseHosts = false;
       state.autoBundle = true;
       state.expandedGroups.clear();
+      state.collapsedPlanes.clear();
       state.scope = 'all';
       state.spacing = 1;
       state.gran = 'device';
@@ -4476,6 +5059,8 @@
       } else if (key === 'scope') {
         state.scope = 'all';
         if ($('#scope-select')) $('#scope-select').value = 'all';
+      } else if (key.indexOf('plane:') === 0) {
+        state.collapsedPlanes.delete(key.slice(6));
       } else if (key === 'query') {
         state.query = '';
         state.isolateQuery = false;
@@ -4681,8 +5266,35 @@
     });
     window.addEventListener('resize', syncSidebarButton);
 
+    var commandInput = $('#command-input');
+    if (commandInput) {
+      commandInput.addEventListener('input', renderCommand);
+      commandInput.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); moveCommand(1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); moveCommand(-1); }
+        else if (e.key === 'Enter') { e.preventDefault(); runCommand(command.active); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeCommand(true); }
+      });
+    }
+    var commandList = $('#command-list');
+    if (commandList) {
+      commandList.addEventListener('click', function (e) {
+        var item = e.target.closest('[data-command-index]');
+        if (item) runCommand(Number(item.getAttribute('data-command-index')));
+      });
+    }
+    $$('#command [data-command-close]').forEach(function (el) {
+      el.addEventListener('click', function () { closeCommand(true); });
+    });
+
     document.addEventListener('keydown', function (e) {
+      if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === 'k') {
+        e.preventDefault();
+        if (command.open) closeCommand(true); else openCommand();
+        return;
+      }
       if (e.key === 'Escape') {
+        if (command.open) { e.preventDefault(); closeCommand(true); return; }
         if (document.fullscreenElement && document.exitFullscreen) { document.exitFullscreen(); return; }
         var red = $('#redundancy');
         if (red && !red.classList.contains('hidden')) { closeRedundancy(); return; }
@@ -4699,6 +5311,100 @@
         else clearSelection();
       }
     });
+  }
+
+  function commandActions() {
+    return [
+      { kind: 'ACT', label: '适应窗口', hint: '缩放并居中全部设备', run: function () { fitGraph(); } },
+      { kind: 'ACT', label: '重置筛选与视图', hint: '清除所有筛选并恢复默认视图', run: function () { $('#btn-reset').click(); } },
+      { kind: 'ACT', label: '切换深色 / 浅色主题', hint: '主题', run: function () { $('#btn-theme').click(); } },
+      { kind: 'ACT', label: '布局：横向分层', hint: '设备视图', run: function () { setLayout('layered'); } },
+      { kind: 'ACT', label: '布局：网络平面', hint: '按 meta.fabric 分带', run: function () { setLayout('plane'); } },
+      { kind: 'ACT', label: '打开筛选器', hint: '设备 / 网口 / 类型', run: function () { openPicker('all'); } },
+      { kind: 'ACT', label: '打开网络平面冗余分析', hint: '主机 × 存储', run: function () { openRedundancy(); } },
+      { kind: 'ACT', label: '导出 PNG', hint: '当前视口 1×', run: function () { exportImage('png'); } },
+      { kind: 'ACT', label: '导出设备清单 CSV', hint: '全部设备', run: function () { exportInventory('devices'); } },
+      { kind: 'ACT', label: '显示图例', hint: '侧栏', run: function () { setSideTab('info'); } },
+      { kind: 'ACT', label: '显示视图设置', hint: '布局 / 风格 / 预设', run: function () { setSideTab('display'); } },
+      { kind: 'ACT', label: '显示筛选', hint: '设备 / 类型', run: function () { setSideTab('filter'); } },
+      { kind: 'ACT', label: '收起 / 展开侧栏', hint: '界面', run: function () { $('#btn-sidebar').click(); } }
+    ];
+  }
+
+  function renderCommand() {
+    var list = $('#command-list');
+    if (!list) return;
+    var q = ($('#command-input') && $('#command-input').value || '').trim().toLowerCase();
+    var items = commandActions().filter(function (a) {
+      return !q || (a.label + ' ' + a.hint).toLowerCase().indexOf(q) >= 0;
+    });
+    if (q) {
+      var devs = G.devices.filter(function (d) { return deviceMatches(d, q); }).slice(0, 8);
+      devs.forEach(function (d) {
+        var ip = (d.ips && d.ips[0]) || (d.meta && d.meta.fabric) || '';
+        items.push({
+          kind: 'DEV', label: displayName(d), hint: TYPE_LABEL[d.type] + (ip ? ' · ' + ip : ''),
+          device: d,
+          run: function () {
+            var node = state.nodes.filter(function (n) { return n._device === d.id; })[0];
+            if (!node) { toast('该设备不在当前视图'); return; }
+            selectNode(node.id, { center: true });
+          }
+        });
+      });
+    }
+    command.items = items.slice(0, 14);
+    command.active = 0;
+    if (!command.items.length) {
+      list.innerHTML = '<div class="command-empty">没有匹配的设备或命令</div>';
+      return;
+    }
+    list.innerHTML = command.items.map(function (it, i) {
+      return '<div class="command-item' + (i === 0 ? ' active' : '') + '" role="option" aria-selected="' + (i === 0) + '" data-command-index="' + i + '">' +
+        '<span class="cmd-kind">' + it.kind + '</span>' +
+        '<span class="cmd-title">' + esc(it.label) + '</span>' +
+        '<span class="cmd-hint">' + esc(it.hint) + '</span></div>';
+    }).join('');
+  }
+
+  function moveCommand(dir) {
+    if (!command.items.length) return;
+    command.active = (command.active + dir + command.items.length) % command.items.length;
+    $$('#command-list .command-item').forEach(function (el, i) {
+      var on = i === command.active;
+      el.classList.toggle('active', on);
+      el.setAttribute('aria-selected', on ? 'true' : 'false');
+      if (on) el.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
+  function runCommand(index) {
+    var it = command.items[index];
+    if (!it) return;
+    closeCommand(false);
+    it.run();
+  }
+
+  function openCommand() {
+    closeSummary(false);
+    closeStyleMenu(false);
+    closeExportMenu(false);
+    $('#command').classList.remove('hidden');
+    command.open = true;
+    var input = $('#command-input');
+    if (input) { input.value = ''; input.focus(); }
+    renderCommand();
+  }
+
+  function closeCommand(refocus) {
+    var modal = $('#command');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    command.open = false;
+    if (refocus) {
+      var search = $('#search');
+      if (search) search.focus();
+    }
   }
 
   function openSummary() {
@@ -5071,6 +5777,8 @@
     renderScopeSelector();
     renderWarnings();
     bindUI();
+    loadPresets();
+    renderPresets();
     setSideTab(state.sideTab || 'filter');
     syncStyleButtons();
     syncLayoutButtons();

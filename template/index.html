@@ -141,7 +141,8 @@
         <div class="panel search-panel">
         <label class="search">
           <span class="search-icon">⌕</span>
-          <input id="search" type="search" placeholder="搜索设备 / 端口 / WWN / IP" autocomplete="off"/>
+          <input id="search" type="search" placeholder="搜索设备 / 端口 / WWN / IP" autocomplete="off" title="支持 site: fabric: type: layer: status:"/>
+          <span class="search-kbd">⌘K</span>
         </label>
         <label class="switch-row"><input type="checkbox" id="isolate-search"/> 仅显示搜索结果</label>
         </div>
@@ -250,6 +251,16 @@
           </div>
         </details>
         <p class="hint">显示设置不影响数据；导出图片会使用当前风格。</p>
+      </section>
+
+      <section class="panel preset-panel">
+        <h2>视图预设</h2>
+        <div class="preset-save">
+          <input id="preset-name" type="text" maxlength="24" placeholder="预设名称" autocomplete="off"/>
+          <button id="preset-save" class="mini-btn" type="button">保存当前</button>
+        </div>
+        <div id="preset-list" class="preset-list"></div>
+        <p class="hint">保存筛选、范围、布局、风格到本地；不联网。</p>
       </section>
       </div>
 
@@ -408,8 +419,13 @@
       </label>
       <span id="red-summary" class="red-summary"></span>
       <span class="grow"></span>
+      <select id="red-fail" class="red-fail" title="模拟移除一台交换机，观察路径变化">
+        <option value="">模拟故障：无</option>
+      </select>
       <button class="btn" id="red-csv">导出 CSV</button>
     </div>
+    <div id="red-impact" class="red-impact hidden"></div>
+    <div id="red-detail" class="red-detail hidden"></div>
     <div class="redundancy-wrap">
       <table class="redundancy-table">
         <thead id="red-head"></thead>
@@ -417,6 +433,19 @@
       </table>
     </div>
     <footer class="matrix-foot"><span id="red-count"></span><span>基于当前可见设备 / 链路 · 节点不交路径（最多 2 条）</span></footer>
+  </div>
+</div>
+
+<div id="command" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="command-title">
+  <div class="modal-backdrop" data-command-close="1"></div>
+  <div class="command-card">
+    <h2 id="command-title" class="sr-only">命令面板</h2>
+    <div class="command-search">
+      <span class="search-icon">⌕</span>
+      <input id="command-input" type="search" placeholder="搜索设备或执行命令…" autocomplete="off"/>
+    </div>
+    <div id="command-list" class="command-list" role="listbox"></div>
+    <footer class="command-foot"><span>↑↓ 选择 · Enter 执行</span><span><kbd>Esc</kbd> 关闭</span></footer>
   </div>
 </div>
 
