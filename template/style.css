@@ -1842,3 +1842,11 @@ body.shell-shadcn.dark .rank-band {
 @media (max-width: 900px) {
   .side-top { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
 }
+
+/* scope moved into the display tab */
+#side-group-display .scope-row {
+  margin: 0 0 11px;
+  padding: 0 0 11px;
+  border-top: 0;
+  border-bottom: 1px solid var(--border);
+}

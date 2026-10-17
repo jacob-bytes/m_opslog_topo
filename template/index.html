@@ -171,10 +171,6 @@
           <button data-gran="port">端口视图</button>
         </div>
         <p class="hint" id="gran-hint">按设备查看结构，多网口聚合为一条链路。</p>
-        <div class="scope-row" id="scope-row" hidden>
-          <span class="scope-label">范围</span>
-          <select id="scope-select" class="scope-select" aria-label="分析范围"></select>
-        </div>
       </section>
 
       <section class="panel">
@@ -213,6 +209,10 @@
       <div class="side-group" id="side-group-display" data-side-group="display" role="tabpanel" aria-labelledby="side-tab-display" hidden>
       <section class="panel">
         <h2>显示选项</h2>
+        <div class="scope-row" id="scope-row" hidden>
+          <span class="scope-label">范围</span>
+          <select id="scope-select" class="scope-select" aria-label="分析范围"></select>
+        </div>
         <div class="style-row">
           <span class="style-label">界面风格</span>
           <div class="style-switch block" data-shell-group aria-label="界面风格">
