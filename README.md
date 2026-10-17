@@ -6,7 +6,7 @@
 
 > **一句话**：输入交换机日志 + config.txt，输出一张可交互、可导出、完全离线的 SAN/NAS 拓扑图；也支持 graph.json 与 CMDB / API 适配器。
 
-**文档地图**：[图数据契约](docs/graph-schema.md) · [架构与演进](docs/architecture.md) · [适配器契约](adapters/README.md) · [示例数据](sample/) · [最新 HTML](topology.html)
+**文档地图**：[图数据契约](docs/graph-schema.md) · [架构与演进](docs/architecture.md) · [适配器契约](adapters/README.md) · [示例数据](sample/) · [最新 HTML](topology.html) · [发布说明](RELEASING.md)
 
 <a id="toc"></a>
 
@@ -70,6 +70,7 @@
   - [9.6 容量判断](#sec-9-6)
 - [10. 常见问题](#sec-10)
 - [11. 已知边界](#sec-11)
+- [12. 许可证与发布](#sec-12)
 
 <a id="sec-1"></a>
 
@@ -1170,5 +1171,29 @@ python3 topo.py --graph sample/mini.graph.json -o /tmp/mini.html
 - 页面是生成时快照，不做实时刷新、增量更新或服务端权限
 
 ---
+
+<a id="sec-12"></a>
+
+## 12. 许可证与发布
+
+本项目使用 **MIT License**，见 [`LICENSE`](LICENSE)。
+
+生成 HTML 内联的 `vis-network 9.1.9` 采用 Apache-2.0 / MIT 双许可；本项目按 MIT 选项分发，版权和许可见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。Python 侧仅使用标准库，没有运行时第三方依赖。
+
+### v0.1.0
+
+当前版本为 **v0.1.0**。GitHub Release 会提供：
+
+| 文件 | 用途 |
+| --- | --- |
+| `topology-demo-v0.1.0.html` | 样例 config + 交换机日志生成，双击离线打开 |
+| `cmdb-demo-v0.1.0.html` | CMDB JSON 适配器样例 |
+| `m_opslog_topo-sample-v0.1.0.zip` | 样例 config / logs / graph / CMDB |
+| `SHA256SUMS` | 校验和 |
+| Source code (zip/tar.gz) | GitHub 自动生成 |
+
+发布流程、版本号和手动兜底见 [`RELEASING.md`](RELEASING.md)，版本变更见 [`CHANGELOG.md`](CHANGELOG.md)。
+
+> 发布只包含 `sample/` 脱敏样例，不包含真实客户日志、真实 WWN 或生产拓扑。生成的 HTML 本身包含完整拓扑和 WWN，仍然应当按敏感文件管理。
 
 [↑ 返回目录](#toc)

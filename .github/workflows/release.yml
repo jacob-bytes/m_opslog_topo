@@ -1,0 +1,53 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build release artifacts
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          python3 -m py_compile topo.py
+          python3 topo.py --config sample/config.txt --logs sample/logs -o "release/topology-demo-${TAG}.html"
+          python3 topo.py --adapter adapters/cmdb_json.py --adapter-input sample/cmdb.json -o "release/cmdb-demo-${TAG}.html"
+          zip -r "release/m_opslog_topo-sample-${TAG}.zip" sample
+          cd release
+          sha256sum *.html *.zip > SHA256SUMS
+          cd ..
+          test -s "release/topology-demo-${TAG}.html"
+          test -s "release/cmdb-demo-${TAG}.html"
+          test -s "release/m_opslog_topo-sample-${TAG}.zip"
+          test -s release/SHA256SUMS
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/*.html
+            release/*.zip
+            release/SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

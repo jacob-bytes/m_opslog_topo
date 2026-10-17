@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Syntax checks
+        run: |
+          python3 -m py_compile topo.py
+          node --check template/app.js
+
+      - name: Build sample artifacts
+        run: |
+          mkdir -p build
+          python3 topo.py --config sample/config.txt --logs sample/logs -o build/topology.html
+          python3 topo.py --adapter adapters/cmdb_json.py --adapter-input sample/cmdb.json -o build/cmdb.html
+          python3 topo.py --graph sample/topology.graph.json -o build/graph.html
+          test -s build/topology.html
+          test -s build/cmdb.html
+          test -s build/graph.html
+          grep -qi '<!doctype html>' build/topology.html
+          grep -qi '<!doctype html>' build/cmdb.html
+          grep -qi '<!doctype html>' build/graph.html
+
+      - name: Upload sample artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-html
+          path: build/
+          if-no-files-found: error
