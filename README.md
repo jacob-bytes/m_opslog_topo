@@ -6,7 +6,7 @@
 
 > **一句话**：输入交换机日志 + config.txt，输出一张可交互、可导出、完全离线的 SAN/NAS 拓扑图；也支持 graph.json 与 CMDB / API 适配器。
 
-**文档地图**：[图数据契约](docs/graph-schema.md) · [架构与演进](docs/architecture.md) · [适配器契约](adapters/README.md) · [示例数据](sample/) · [最新 HTML](topology.html) · [发布说明](RELEASING.md)
+**文档地图**：[图数据契约](docs/graph-schema.md) · [架构与演进](docs/architecture.md) · [Rust 原生渲染注意事项](docs/rust-native-rendering.md) · [适配器契约](adapters/README.md) · [示例数据](sample/) · [最新 HTML](topology.html) · [发布说明](RELEASING.md)
 
 <a id="toc"></a>
 
