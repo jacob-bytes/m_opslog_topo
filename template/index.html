@@ -137,14 +137,33 @@
 
   <div id="body">
     <aside id="sidebar">
-      <div class="panel search-panel">
+      <div class="side-top">
+        <div class="panel search-panel">
         <label class="search">
           <span class="search-icon">⌕</span>
           <input id="search" type="search" placeholder="搜索设备 / 端口 / WWN / IP" autocomplete="off"/>
         </label>
         <label class="switch-row"><input type="checkbox" id="isolate-search"/> 仅显示搜索结果</label>
+        </div>
+
+        <div class="side-tabs" id="side-tabs" role="tablist" aria-label="侧栏导航">
+          <button class="side-tab active" id="side-tab-filter" data-side-tab="filter" role="tab" aria-selected="true" aria-controls="side-group-filter" tabindex="0">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8L3 5z"/></svg>
+            <span>筛选</span>
+          </button>
+          <button class="side-tab" id="side-tab-display" data-side-tab="display" role="tab" aria-selected="false" aria-controls="side-group-display" tabindex="-1">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M18 7h2M4 17h3M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+            <span>显示</span>
+          </button>
+          <button class="side-tab" id="side-tab-info" data-side-tab="info" role="tab" aria-selected="false" aria-controls="side-group-info" tabindex="-1">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+            <span>图例</span>
+            <span class="side-tab-badge" id="side-info-badge" hidden></span>
+          </button>
+        </div>
       </div>
 
+      <div class="side-group" id="side-group-filter" data-side-group="filter" role="tabpanel" aria-labelledby="side-tab-filter">
       <section class="panel">
         <h2>视图粒度</h2>
         <div class="segmented" id="gran">
@@ -189,7 +208,9 @@
         <h3 class="filter-subhead">链路类型</h3>
         <div id="kind-filters" class="check-list"></div>
       </section>
+      </div>
 
+      <div class="side-group" id="side-group-display" data-side-group="display" role="tabpanel" aria-labelledby="side-tab-display" hidden>
       <section class="panel">
         <h2>显示选项</h2>
         <div class="style-row">
@@ -220,8 +241,11 @@
             <input type="range" id="spacing" min="0.75" max="1.6" step="0.05" value="1"/>
           </div>
         </details>
+        <p class="hint">显示设置不影响数据；导出图片会使用当前风格。</p>
       </section>
+      </div>
 
+      <div class="side-group" id="side-group-info" data-side-group="info" role="tabpanel" aria-labelledby="side-tab-info" hidden>
       <section class="panel">
         <h2>图例</h2>
         <div class="legend">
@@ -249,6 +273,7 @@
         <h2>解析提示 <span id="warning-count" class="badge"></span></h2>
         <div id="warnings" class="warnings"></div>
       </section>
+      </div>
 
       <p class="footnote">点击设备查看详情 · 单击空白处取消高亮 · Esc 关闭</p>
     </aside>
