@@ -1,0 +1,31 @@
+# ============================================================
+# 交换机日志：sw-edge-01（接入层）
+# 格式：port <端口> status <状态> speed <速率> peer_wwn <对端 WWN>
+# ============================================================
+
+Switch Name: sw-edge-01
+Switch WWN: 10:00:00:00:c9:ff:00:01
+IP Address: 10.10.1.11
+Model: Brocade G620
+Firmware: v9.1.0
+
+# ---------------- 端口互联信息 ----------------
+port 1  status online  speed 32G  peer_wwn 10:00:00:00:c9:a1:00:01   # host-01 p1
+port 2  status online  speed 32G  peer_wwn 10:00:00:00:c9:a1:00:02   # host-01 p2
+port 3  status online  speed 32G  peer_wwn 10:00:00:00:c9:a2:00:01   # host-02 p1
+port 4  status online  speed 32G  peer_wwn 10:00:00:00:c9:a2:00:02   # host-02 p2
+port 5  status online  speed 32G  peer_wwn 10:00:00:00:c9:a3:00:01   # host-03
+port 6  status online  speed 32G  peer_wwn 10:00:00:00:c9:a4:00:01   # host-04 p1
+port 7  status online  speed 32G  peer_wwn 10:00:00:00:c9:a4:00:02   # host-04 p2
+
+# 该 WWN 不在 config.txt 中，用来演示“未识别设备”
+port 8  status online  speed 32G  peer_wwn 20:00:00:00:c9:ee:00:01
+
+# 级联到两台核心交换机（对端 WWN 是交换机的 Switch WWN）
+port 20 status online  speed 32G  peer_wwn 10:00:00:00:c9:ff:00:02  peer_port 20
+port 21 status online  speed 32G  peer_wwn 10:00:00:00:c9:ff:00:03  peer_port 20
+
+# 空闲端口
+port 9  status notconnected
+port 10 status notconnected
+port 11 status notconnected

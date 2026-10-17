@@ -1,0 +1,30 @@
+{
+  "generated_at": "2026-10-17T14:30:00+08:00",
+  "title": "CMDB sample",
+  "devices": [
+    {
+      "id": "host-01", "type": "host", "label": "host-01", "ip": "10.20.1.11",
+      "meta": {"site": "dc-a", "fabric": "A"},
+      "ports": [{"label": "p1", "wwn": "10:00:00:00:c9:a1:00:01"}]
+    },
+    {
+      "id": "host-02", "type": "host", "label": "host-02", "ip": "10.20.1.12",
+      "meta": {"site": "dc-a", "fabric": "B"},
+      "ports": [{"label": "p1", "wwn": "10:00:00:00:c9:a1:00:02"}]
+    },
+    {
+      "id": "sw-01", "type": "switch", "label": "sw-01", "ip": "10.10.1.11",
+      "ports": [{"label": "1"}, {"label": "2"}, {"label": "20"}]
+    },
+    {
+      "id": "storage-01", "type": "storage", "label": "storage-01", "ip": "10.20.1.31",
+      "meta": {"site": "dc-a", "vendor": "Huawei", "model": "OceanStor"},
+      "ports": [{"label": "0A", "wwn": "20:00:00:00:c9:b1:00:01"}]
+    }
+  ],
+  "links": [
+    {"a": "host-01:p1", "b": "sw-01:1", "kind": "host", "status": "up"},
+    {"a": "host-02:p1", "b": "sw-01:2", "kind": "host", "status": "up"},
+    {"a": "storage-01:0A", "b": "sw-01:20", "kind": "storage", "status": "up"}
+  ]
+}

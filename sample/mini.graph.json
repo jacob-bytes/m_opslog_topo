@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "kind": "topology",
+  "generator": "hand-written-example",
+  "devices": [
+    {
+      "id": "host:app-01",
+      "type": "host",
+      "label": "app-01",
+      "ips": ["10.0.0.11"],
+      "meta": { "group": "web", "site": "dc-a" },
+      "ports": [
+        {
+          "id": "host:app-01#p1",
+          "label": "p1",
+          "wwn": "10:00:00:00:c9:a1:00:01",
+          "connected": true
+        }
+      ]
+    },
+    {
+      "id": "switch:sw1",
+      "type": "switch",
+      "label": "sw1",
+      "wwn": "10:00:00:00:c9:ff:00:01",
+      "ips": ["10.0.0.1"],
+      "meta": { "layer": 1, "model": "example-switch" },
+      "ports": [
+        { "id": "switch:sw1#1", "label": "1", "connected": true },
+        { "id": "switch:sw1#10", "label": "10", "connected": true }
+      ]
+    },
+    {
+      "id": "storage:st1",
+      "type": "storage",
+      "label": "st1",
+      "meta": { "site": "dc-a" },
+      "ports": [
+        {
+          "id": "storage:st1#0A",
+          "label": "0A",
+          "wwn": "20:00:00:00:c9:b1:00:01",
+          "connected": true
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "a": { "device": "host:app-01", "port": "host:app-01#p1" },
+      "b": { "device": "switch:sw1", "port": "switch:sw1#1" },
+      "kind": "host",
+      "status": "up"
+    },
+    {
+      "a": { "device": "switch:sw1", "port": "switch:sw1#10" },
+      "b": { "device": "storage:st1", "port": "storage:st1#0A" },
+      "kind": "storage",
+      "status": "up"
+    }
+  ]
+}

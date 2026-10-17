@@ -1,0 +1,785 @@
+{
+  "schema_version": "1.0",
+  "kind": "topology",
+  "generated_at": "2026-10-17 12:55:50",
+  "generator": "topo.py",
+  "sources": {
+    "config": "sample/config.txt",
+    "logs": [
+      "sample/logs/sw-core-01.txt",
+      "sample/logs/sw-core-02.txt",
+      "sample/logs/sw-edge-01.txt"
+    ]
+  },
+  "stats": {
+    "hosts": 4,
+    "switches": 3,
+    "storages": 2,
+    "unknowns": 1,
+    "ports": 40,
+    "links": 16,
+    "kinds": {
+      "storage": 6,
+      "switch": 2,
+      "host": 7,
+      "unknown": 1
+    }
+  },
+  "devices": [
+    {
+      "id": "host:host-01",
+      "type": "host",
+      "label": "host-01",
+      "ports": [
+        {
+          "id": "host:host-01#p1",
+          "label": "p1",
+          "device": "host:host-01",
+          "wwn": "10:00:00:00:c9:a1:00:01",
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "host:host-01#p2",
+          "label": "p2",
+          "device": "host:host-01",
+          "wwn": "10:00:00:00:c9:a1:00:02",
+          "connected": true,
+          "unused": false
+        }
+      ],
+      "wwn": "10:00:00:00:c9:a1:00:01",
+      "ips": [
+        "10.20.1.11"
+      ],
+      "meta": {
+        "layer": 0
+      }
+    },
+    {
+      "id": "host:host-02",
+      "type": "host",
+      "label": "host-02",
+      "ports": [
+        {
+          "id": "host:host-02#p1",
+          "label": "p1",
+          "device": "host:host-02",
+          "wwn": "10:00:00:00:c9:a2:00:01",
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "host:host-02#p2",
+          "label": "p2",
+          "device": "host:host-02",
+          "wwn": "10:00:00:00:c9:a2:00:02",
+          "connected": true,
+          "unused": false
+        }
+      ],
+      "wwn": "10:00:00:00:c9:a2:00:01",
+      "ips": [
+        "10.20.1.12"
+      ],
+      "meta": {
+        "layer": 0
+      }
+    },
+    {
+      "id": "host:host-03",
+      "type": "host",
+      "label": "host-03",
+      "ports": [
+        {
+          "id": "host:host-03#p1",
+          "label": "p1",
+          "device": "host:host-03",
+          "wwn": "10:00:00:00:c9:a3:00:01",
+          "connected": true,
+          "unused": false
+        }
+      ],
+      "wwn": "10:00:00:00:c9:a3:00:01",
+      "ips": [
+        "10.20.1.13"
+      ],
+      "meta": {
+        "layer": 0
+      }
+    },
+    {
+      "id": "host:host-04",
+      "type": "host",
+      "label": "host-04",
+      "ports": [
+        {
+          "id": "host:host-04#p1",
+          "label": "p1",
+          "device": "host:host-04",
+          "wwn": "10:00:00:00:c9:a4:00:01",
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "host:host-04#p2",
+          "label": "p2",
+          "device": "host:host-04",
+          "wwn": "10:00:00:00:c9:a4:00:02",
+          "connected": true,
+          "unused": false
+        }
+      ],
+      "wwn": "10:00:00:00:c9:a4:00:01",
+      "ips": [
+        "10.20.1.14"
+      ],
+      "meta": {
+        "layer": 0
+      }
+    },
+    {
+      "id": "storage:storage-01",
+      "type": "storage",
+      "label": "storage-01",
+      "ports": [
+        {
+          "id": "storage:storage-01#0A",
+          "label": "0A",
+          "device": "storage:storage-01",
+          "wwn": "20:00:00:00:c9:b1:00:01",
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "storage:storage-01#0B",
+          "label": "0B",
+          "device": "storage:storage-01",
+          "wwn": "20:00:00:00:c9:b1:00:02",
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "storage:storage-01#1A",
+          "label": "1A",
+          "device": "storage:storage-01",
+          "wwn": "20:00:00:00:c9:b1:00:03",
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "storage:storage-01#1B",
+          "label": "1B",
+          "device": "storage:storage-01",
+          "wwn": "20:00:00:00:c9:b1:00:04",
+          "connected": true,
+          "unused": false
+        }
+      ],
+      "wwn": "20:00:00:00:c9:b1:00:01",
+      "ips": [
+        "10.20.1.31"
+      ],
+      "meta": {
+        "vendor": "Huawei",
+        "model": "OceanStor",
+        "layer": 3
+      }
+    },
+    {
+      "id": "storage:storage-02",
+      "type": "storage",
+      "label": "storage-02",
+      "ports": [
+        {
+          "id": "storage:storage-02#0A",
+          "label": "0A",
+          "device": "storage:storage-02",
+          "wwn": "20:00:00:00:c9:b2:00:01",
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "storage:storage-02#0B",
+          "label": "0B",
+          "device": "storage:storage-02",
+          "wwn": "20:00:00:00:c9:b2:00:02",
+          "connected": true,
+          "unused": false
+        }
+      ],
+      "wwn": "20:00:00:00:c9:b2:00:01",
+      "ips": [
+        "10.20.1.32"
+      ],
+      "meta": {
+        "vendor": "Huawei",
+        "model": "OceanStor",
+        "layer": 3
+      }
+    },
+    {
+      "id": "switch:sw-core-01",
+      "type": "switch",
+      "label": "sw-core-01",
+      "ports": [
+        {
+          "id": "switch:sw-core-01#1",
+          "label": "1",
+          "device": "switch:sw-core-01",
+          "wwn": null,
+          "connected": false,
+          "unused": false,
+          "meta": {
+            "unused": true
+          }
+        },
+        {
+          "id": "switch:sw-core-01#2",
+          "label": "2",
+          "device": "switch:sw-core-01",
+          "wwn": null,
+          "connected": false,
+          "unused": false,
+          "meta": {
+            "unused": true
+          }
+        },
+        {
+          "id": "switch:sw-core-01#3",
+          "label": "3",
+          "device": "switch:sw-core-01",
+          "wwn": null,
+          "connected": false,
+          "unused": false,
+          "meta": {
+            "unused": true
+          }
+        },
+        {
+          "id": "switch:sw-core-01#10",
+          "label": "10",
+          "device": "switch:sw-core-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-core-01#11",
+          "label": "11",
+          "device": "switch:sw-core-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-core-01#20",
+          "label": "20",
+          "device": "switch:sw-core-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        }
+      ],
+      "wwn": "10:00:00:00:c9:ff:00:02",
+      "ips": [
+        "10.10.1.21"
+      ],
+      "meta": {
+        "model": "Brocade",
+        "layer": 2
+      }
+    },
+    {
+      "id": "switch:sw-core-02",
+      "type": "switch",
+      "label": "sw-core-02",
+      "ports": [
+        {
+          "id": "switch:sw-core-02#1",
+          "label": "1",
+          "device": "switch:sw-core-02",
+          "wwn": null,
+          "connected": false,
+          "unused": false,
+          "meta": {
+            "unused": true
+          }
+        },
+        {
+          "id": "switch:sw-core-02#2",
+          "label": "2",
+          "device": "switch:sw-core-02",
+          "wwn": null,
+          "connected": false,
+          "unused": false,
+          "meta": {
+            "unused": true
+          }
+        },
+        {
+          "id": "switch:sw-core-02#10",
+          "label": "10",
+          "device": "switch:sw-core-02",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-core-02#11",
+          "label": "11",
+          "device": "switch:sw-core-02",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-core-02#12",
+          "label": "12",
+          "device": "switch:sw-core-02",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-core-02#13",
+          "label": "13",
+          "device": "switch:sw-core-02",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-core-02#20",
+          "label": "20",
+          "device": "switch:sw-core-02",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        }
+      ],
+      "wwn": "10:00:00:00:c9:ff:00:03",
+      "ips": [
+        "10.10.1.22"
+      ],
+      "meta": {
+        "model": "Brocade",
+        "layer": 2
+      }
+    },
+    {
+      "id": "switch:sw-edge-01",
+      "type": "switch",
+      "label": "sw-edge-01",
+      "ports": [
+        {
+          "id": "switch:sw-edge-01#20",
+          "label": "20",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-edge-01#21",
+          "label": "21",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-edge-01#9",
+          "label": "9",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": false,
+          "unused": false,
+          "meta": {
+            "unused": true
+          }
+        },
+        {
+          "id": "switch:sw-edge-01#10",
+          "label": "10",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": false,
+          "unused": false,
+          "meta": {
+            "unused": true
+          }
+        },
+        {
+          "id": "switch:sw-edge-01#11",
+          "label": "11",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": false,
+          "unused": false,
+          "meta": {
+            "unused": true
+          }
+        },
+        {
+          "id": "switch:sw-edge-01#1",
+          "label": "1",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-edge-01#2",
+          "label": "2",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-edge-01#3",
+          "label": "3",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-edge-01#4",
+          "label": "4",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-edge-01#5",
+          "label": "5",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-edge-01#6",
+          "label": "6",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-edge-01#7",
+          "label": "7",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        },
+        {
+          "id": "switch:sw-edge-01#8",
+          "label": "8",
+          "device": "switch:sw-edge-01",
+          "wwn": null,
+          "connected": true,
+          "unused": false
+        }
+      ],
+      "wwn": "10:00:00:00:c9:ff:00:01",
+      "ips": [
+        "10.10.1.11"
+      ],
+      "meta": {
+        "model": "Brocade",
+        "layer": 1
+      }
+    },
+    {
+      "id": "unknown:20:00:00:00:c9:ee:00:01",
+      "type": "unknown",
+      "label": "20:00:00:00:c9:ee:00:01",
+      "ports": [
+        {
+          "id": "unknown:20:00:00:00:c9:ee:00:01#ee:00:01",
+          "label": "ee:00:01",
+          "device": "unknown:20:00:00:00:c9:ee:00:01",
+          "wwn": "20:00:00:00:c9:ee:00:01",
+          "connected": true,
+          "unused": false
+        }
+      ],
+      "wwn": "20:00:00:00:c9:ee:00:01",
+      "ips": [],
+      "meta": {
+        "unresolved": true,
+        "layer": 2
+      }
+    }
+  ],
+  "links": [
+    {
+      "a": {
+        "device": "switch:sw-core-01",
+        "port": "switch:sw-core-01#10",
+        "wwn": null
+      },
+      "b": {
+        "device": "storage:storage-01",
+        "port": "storage:storage-01#0A",
+        "wwn": "20:00:00:00:c9:b1:00:01"
+      },
+      "kind": "storage",
+      "status": "up",
+      "speed": null,
+      "source": "sw-core-01.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-core-01",
+        "port": "switch:sw-core-01#11",
+        "wwn": null
+      },
+      "b": {
+        "device": "storage:storage-01",
+        "port": "storage:storage-01#0B",
+        "wwn": "20:00:00:00:c9:b1:00:02"
+      },
+      "kind": "storage",
+      "status": "up",
+      "speed": null,
+      "source": "sw-core-01.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-core-01",
+        "port": "switch:sw-core-01#20",
+        "wwn": null
+      },
+      "b": {
+        "device": "switch:sw-edge-01",
+        "port": "switch:sw-edge-01#20",
+        "wwn": "10:00:00:00:c9:ff:00:01"
+      },
+      "kind": "switch",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-core-01.txt, sw-edge-01.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-core-02",
+        "port": "switch:sw-core-02#10",
+        "wwn": null
+      },
+      "b": {
+        "device": "storage:storage-01",
+        "port": "storage:storage-01#1A",
+        "wwn": "20:00:00:00:c9:b1:00:03"
+      },
+      "kind": "storage",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-core-02.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-core-02",
+        "port": "switch:sw-core-02#11",
+        "wwn": null
+      },
+      "b": {
+        "device": "storage:storage-01",
+        "port": "storage:storage-01#1B",
+        "wwn": "20:00:00:00:c9:b1:00:04"
+      },
+      "kind": "storage",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-core-02.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-core-02",
+        "port": "switch:sw-core-02#12",
+        "wwn": null
+      },
+      "b": {
+        "device": "storage:storage-02",
+        "port": "storage:storage-02#0A",
+        "wwn": "20:00:00:00:c9:b2:00:01"
+      },
+      "kind": "storage",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-core-02.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-core-02",
+        "port": "switch:sw-core-02#13",
+        "wwn": null
+      },
+      "b": {
+        "device": "storage:storage-02",
+        "port": "storage:storage-02#0B",
+        "wwn": "20:00:00:00:c9:b2:00:02"
+      },
+      "kind": "storage",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-core-02.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-core-02",
+        "port": "switch:sw-core-02#20",
+        "wwn": null
+      },
+      "b": {
+        "device": "switch:sw-edge-01",
+        "port": "switch:sw-edge-01#21",
+        "wwn": "10:00:00:00:c9:ff:00:01"
+      },
+      "kind": "switch",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-core-02.txt, sw-edge-01.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-edge-01",
+        "port": "switch:sw-edge-01#1",
+        "wwn": null
+      },
+      "b": {
+        "device": "host:host-01",
+        "port": "host:host-01#p1",
+        "wwn": "10:00:00:00:c9:a1:00:01"
+      },
+      "kind": "host",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-edge-01.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-edge-01",
+        "port": "switch:sw-edge-01#2",
+        "wwn": null
+      },
+      "b": {
+        "device": "host:host-01",
+        "port": "host:host-01#p2",
+        "wwn": "10:00:00:00:c9:a1:00:02"
+      },
+      "kind": "host",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-edge-01.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-edge-01",
+        "port": "switch:sw-edge-01#3",
+        "wwn": null
+      },
+      "b": {
+        "device": "host:host-02",
+        "port": "host:host-02#p1",
+        "wwn": "10:00:00:00:c9:a2:00:01"
+      },
+      "kind": "host",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-edge-01.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-edge-01",
+        "port": "switch:sw-edge-01#4",
+        "wwn": null
+      },
+      "b": {
+        "device": "host:host-02",
+        "port": "host:host-02#p2",
+        "wwn": "10:00:00:00:c9:a2:00:02"
+      },
+      "kind": "host",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-edge-01.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-edge-01",
+        "port": "switch:sw-edge-01#5",
+        "wwn": null
+      },
+      "b": {
+        "device": "host:host-03",
+        "port": "host:host-03#p1",
+        "wwn": "10:00:00:00:c9:a3:00:01"
+      },
+      "kind": "host",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-edge-01.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-edge-01",
+        "port": "switch:sw-edge-01#6",
+        "wwn": null
+      },
+      "b": {
+        "device": "host:host-04",
+        "port": "host:host-04#p1",
+        "wwn": "10:00:00:00:c9:a4:00:01"
+      },
+      "kind": "host",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-edge-01.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-edge-01",
+        "port": "switch:sw-edge-01#7",
+        "wwn": null
+      },
+      "b": {
+        "device": "host:host-04",
+        "port": "host:host-04#p2",
+        "wwn": "10:00:00:00:c9:a4:00:02"
+      },
+      "kind": "host",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-edge-01.txt"
+    },
+    {
+      "a": {
+        "device": "switch:sw-edge-01",
+        "port": "switch:sw-edge-01#8",
+        "wwn": null
+      },
+      "b": {
+        "device": "unknown:20:00:00:00:c9:ee:00:01",
+        "port": "unknown:20:00:00:00:c9:ee:00:01#ee:00:01",
+        "wwn": "20:00:00:00:c9:ee:00:01"
+      },
+      "kind": "unknown",
+      "status": "up",
+      "speed": "32G",
+      "source": "sw-edge-01.txt"
+    }
+  ],
+  "warnings": [
+    {
+      "level": "info",
+      "msg": "未识别的对端 WWN 20:00:00:00:c9:ee:00:01（不在 config.txt 中，来源 sw-edge-01.txt）",
+      "device": "unknown:20:00:00:00:c9:ee:00:01"
+    }
+  ]
+}

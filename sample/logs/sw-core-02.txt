@@ -1,0 +1,20 @@
+# ============================================================
+# 交换机日志：sw-core-02（核心层）
+# 格式：key=value 单行风格
+# ============================================================
+
+Switch Name: sw-core-02
+Switch WWN: 10:00:00:00:c9:ff:00:03
+IP Address: 10.10.1.22
+Model: Brocade G630
+
+# ---------------- 端口互联信息 ----------------
+port=10; peer_wwn=20:00:00:00:c9:b1:00:03; peer_port=1A; status=connected; speed=32G
+port=11; peer_wwn=20:00:00:00:c9:b1:00:04; peer_port=1B; status=connected; speed=32G
+port=12; peer_wwn=20:00:00:00:c9:b2:00:01; peer_port=0A; status=connected; speed=32G
+port=13; peer_wwn=20:00:00:00:c9:b2:00:02; peer_port=0B; status=connected; speed=32G
+port=20; peer_wwn=10:00:00:00:c9:ff:00:01; peer_port=21; status=connected; speed=32G
+
+# 空闲端口
+port=1; status=notconnected
+port=2; status=notconnected

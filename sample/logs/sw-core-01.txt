@@ -1,0 +1,20 @@
+# ============================================================
+# 交换机日志：sw-core-01（核心层）
+# 格式：表格式端口列表
+# ============================================================
+
+Switch Name: sw-core-01
+Switch WWN: 10:00:00:00:c9:ff:00:02
+IP Address: 10.10.1.21
+Model: Brocade G630
+
+# ---------------- 端口互联信息 ----------------
+Index  Port  Address   Peer_WWN                  Peer_Port  Status
+0      10    0x010900  20:00:00:00:c9:b1:00:01   0A         online
+1      11    0x010A00  20:00:00:00:c9:b1:00:02   0B         online
+2      20    0x011300  10:00:00:00:c9:ff:00:01   20         online
+
+# 空闲端口
+port 1  status No_Module
+port 2  status No_Module
+port 3  status No_Module

@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>__TITLE__</title>
+<style>/*__STYLE__*/</style>
+</head>
+<body class="shell-classic">
+<div id="app">
+  <header id="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+          <circle cx="5" cy="12" r="2.5"/>
+          <circle cx="19" cy="6.5" r="2.5"/>
+          <circle cx="19" cy="17.5" r="2.5"/>
+          <path d="M7.3 10.9 16.7 7.4M7.3 13.1 16.7 16.6"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="title-row">
+          <h1>__TITLE__</h1>
+          <span class="brand-badge" title="SAN 与 NAS 存储拓扑">SAN · NAS</span>
+        </div>
+        <p id="meta-line">正在加载…</p>
+      </div>
+    </div>
+    <div class="summary-menu" id="summary-menu">
+      <button id="summary-trigger" type="button" class="summary-trigger" aria-haspopup="dialog" aria-expanded="false" aria-label="设备与链路概览" data-tip="设备与链路概览">
+        <svg class="summary-glyph" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+          <rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/>
+          <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>
+        </svg>
+        <span class="summary-label">设备</span>
+        <b id="summary-total">0</b>
+        <span class="chevron">▾</span>
+      </button>
+      <div class="summary-card" id="summary-card" role="dialog" aria-label="设备与链路概览" hidden>
+        <div class="summary-head">
+          <div>
+            <h3>设备概览</h3>
+            <p id="summary-sub">当前视图</p>
+          </div>
+          <span class="summary-total" id="summary-total-card">0 台</span>
+        </div>
+        <div class="summary-bar" id="summary-bar"></div>
+        <div class="summary-stats" id="summary-stats"></div>
+        <div class="summary-extra" id="summary-extra"></div>
+        <div class="summary-actions">
+          <button id="summary-filter" class="btn primary">打开筛选</button>
+          <button id="summary-redundancy" class="btn">冗余分析</button>
+          <button id="summary-close" class="btn">关闭</button>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="actions-group">
+        <div class="style-menu" id="style-menu">
+          <button id="style-trigger" type="button" class="btn ghost style-trigger" aria-label="节点风格" aria-haspopup="listbox" aria-expanded="false" data-tip="节点风格：点击切换">
+            <span class="swatch line" id="style-swatch"></span>
+            <span class="style-current" id="style-label">线稿</span>
+            <span class="chevron">▾</span>
+          </button>
+          <div class="style-popover" id="style-popover" role="listbox" aria-label="节点风格" hidden>
+            <div class="style-popover-title">节点风格</div>
+            <button class="style-option" data-style="line" role="option" aria-selected="true">
+              <span class="swatch line"></span>
+              <span class="style-copy"><b>线稿</b><small>类型色细边框</small></span>
+              <span class="check">✓</span>
+            </button>
+            <button class="style-option" data-style="glass" role="option" aria-selected="false">
+              <span class="swatch glass"></span>
+              <span class="style-copy"><b>玻璃</b><small>浅色头部与分段条</small></span>
+              <span class="check">✓</span>
+            </button>
+            <button class="style-option" data-style="shadcn" role="option" aria-selected="false">
+              <span class="swatch shadcn"></span>
+              <span class="style-copy"><b>shadcn</b><small>纯中性，克制配色</small></span>
+              <span class="check">✓</span>
+            </button>
+            <button class="style-option" data-style="skeuo" role="option" aria-selected="false">
+              <span class="swatch skeuo"></span>
+              <span class="style-copy"><b>机架</b><small>硬件面板与导轨</small></span>
+              <span class="check">✓</span>
+            </button>
+          </div>
+        </div>
+        <button id="btn-theme" class="btn ghost icon" aria-label="切换主题" data-tip="切换深色 / 浅色主题">◐</button>
+        <span class="actions-sep" aria-hidden="true"></span>
+        <button id="btn-fit" class="btn ghost" aria-label="适应窗口" data-tip="适应窗口：缩放并居中全部设备">⤢ <span>适应</span></button>
+        <button id="btn-reset" class="btn ghost" aria-label="重置筛选与视图" data-tip="重置筛选与视图">↺ <span>重置</span></button>
+        <div class="export-menu" id="export-menu">
+          <button id="btn-export" type="button" class="btn ghost export-trigger" aria-label="导出图片" aria-haspopup="menu" aria-expanded="false" data-tip="导出图片：PNG / JPG / WebP">
+            ⤓ <span>导出</span> <span class="chevron">▾</span>
+          </button>
+          <div class="style-popover export-popover" id="export-popover" role="menu" aria-label="导出格式" hidden>
+            <div class="style-popover-title">导出图片</div>
+            <div class="export-quality" role="group" aria-label="导出清晰度">
+              <span>清晰度</span>
+              <button type="button" data-export-scale="1" class="active">1×</button>
+              <button type="button" data-export-scale="2">2×</button>
+              <button type="button" data-export-scale="3">3×</button>
+            </div>
+            <button class="style-option export-option" data-export="png" role="menuitem">
+              <span class="export-ext">PNG</span>
+              <span class="style-copy"><b>PNG</b><small>无损，适合截图和文档</small></span>
+            </button>
+            <button class="style-option export-option" data-export="jpg" role="menuitem">
+              <span class="export-ext">JPG</span>
+              <span class="style-copy"><b>JPG</b><small>体积小，适合邮件和 Office</small></span>
+            </button>
+            <button class="style-option export-option" data-export="webp" role="menuitem">
+              <span class="export-ext">WEBP</span>
+              <span class="style-copy"><b>WebP</b><small>体积更小，适合网页</small></span>
+            </button>
+            <div class="export-data-sep"></div>
+            <div class="export-data">
+              <div class="style-popover-title">数据清单 · 全部</div>
+              <div class="export-data-links">
+                <button type="button" data-inventory="devices">设备 CSV</button>
+                <button type="button" data-inventory="ports">端口 CSV</button>
+                <button type="button" data-inventory="links">链路 CSV</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <span class="actions-sep" aria-hidden="true"></span>
+        <button id="btn-sidebar" class="btn ghost icon" aria-label="收起侧栏" data-tip="收起侧栏" aria-pressed="false">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>
+          </svg>
+        </button>
+        <button id="btn-fullscreen" class="btn ghost icon" aria-label="全屏预览" data-tip="全屏预览" aria-pressed="false">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div id="body">
+    <aside id="sidebar">
+      <div class="panel search-panel">
+        <label class="search">
+          <span class="search-icon">⌕</span>
+          <input id="search" type="search" placeholder="搜索设备 / 端口 / WWN / IP" autocomplete="off"/>
+        </label>
+        <label class="switch-row"><input type="checkbox" id="isolate-search"/> 仅显示搜索结果</label>
+      </div>
+
+      <section class="panel">
+        <h2>视图粒度</h2>
+        <div class="segmented" id="gran">
+          <button data-gran="device" class="active">设备视图</button>
+          <button data-gran="port">端口视图</button>
+        </div>
+        <p class="hint" id="gran-hint">按设备查看结构，多网口聚合为一条链路。</p>
+        <div class="scope-row" id="scope-row" hidden>
+          <span class="scope-label">范围</span>
+          <select id="scope-select" class="scope-select" aria-label="分析范围"></select>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>设备与网口 <button id="open-picker" class="mini-btn" title="打开精细筛选">精细筛选</button></h2>
+        <div class="scope-grid">
+          <button class="scope-tile" data-scope="host" title="选择要显示的主机">
+            <i class="dot host"></i><span>主机</span><b id="scope-host">0/0</b>
+          </button>
+          <button class="scope-tile" data-scope="switch" title="选择要显示的交换机">
+            <i class="dot switch"></i><span>交换机</span><b id="scope-switch">0/0</b>
+          </button>
+          <button class="scope-tile" data-scope="storage" title="选择要显示的存储及网口">
+            <i class="dot storage"></i><span>存储</span><b id="scope-storage">0/0</b>
+          </button>
+          <button class="scope-tile" data-scope="port" title="按网口筛选">
+            <i class="line port-line"></i><span>网口</span><b id="scope-port">0/0</b>
+          </button>
+        </div>
+        <div class="layer-filter" id="layer-filter">
+          <span class="layer-label">交换机层级</span>
+          <div id="layer-chips" class="chips"></div>
+        </div>
+        <p class="hint">点任一类型打开选择器：可整台设备选择，展开后精确到每个网口。</p>
+      </section>
+
+      <section class="panel">
+        <h2>类型筛选</h2>
+        <h3 class="filter-subhead">设备类型</h3>
+        <div id="type-filters" class="check-list"></div>
+        <div class="filter-divider"></div>
+        <h3 class="filter-subhead">链路类型</h3>
+        <div id="kind-filters" class="check-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>显示选项</h2>
+        <div class="style-row">
+          <span class="style-label">界面风格</span>
+          <div class="style-switch block" data-shell-group aria-label="界面风格">
+            <button data-shell="classic" class="active">经典</button>
+            <button data-shell="shadcn">shadcn</button>
+          </div>
+        </div>
+        <div class="style-row">
+          <span class="style-label">节点风格</span>
+          <div class="style-switch block" data-style-group aria-label="节点风格">
+            <button data-style="line" class="active">线稿</button>
+            <button data-style="glass">玻璃</button>
+            <button data-style="shadcn">shadcn</button>
+            <button data-style="skeuo">机架</button>
+          </div>
+        </div>
+        <label class="switch-row"><input type="checkbox" id="hide-isolated" checked/> 隐藏无连接的设备</label>
+        <label class="switch-row" id="collapse-row" title="仅在设备视图生效：按接入交换机把主机折叠成组"><input type="checkbox" id="collapse-hosts"/> 折叠主机（按接入交换机）</label>
+        <label class="switch-row" id="autobundle-row" title="设备视图链路超过 300 条时自动把主机聚合为组"><input type="checkbox" id="auto-bundle" checked/> 链路过多时自动聚合</label>
+        <details class="adv-settings">
+          <summary>高级显示</summary>
+          <label class="switch-row"><input type="checkbox" id="only-up"/> 只显示在线链路</label>
+          <label class="switch-row" id="unused-row"><input type="checkbox" id="show-unused"/> 显示未使用端口</label>
+          <label class="switch-row"><input type="checkbox" id="show-wwn"/> 在节点上显示 WWN</label>
+          <div class="range-row">
+            <span>布局密度</span>
+            <input type="range" id="spacing" min="0.75" max="1.6" step="0.05" value="1"/>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel">
+        <h2>图例</h2>
+        <div class="legend">
+          <span><i class="dot host"></i>主机</span>
+          <span><i class="dot switch"></i>交换机</span>
+          <span><i class="dot storage"></i>存储阵列</span>
+          <span><i class="dot unknown"></i>未识别设备</span>
+        </div>
+        <div class="legend legend-lines">
+          <span><i class="line host"></i>主机链路</span>
+          <span><i class="line switch"></i>交换机级联</span>
+          <span><i class="line storage"></i>存储链路</span>
+          <span><i class="line unknown"></i>未识别链路</span>
+          <span><i class="line bad"></i>异常链路</span>
+        </div>
+        <div class="legend legend-health">
+          <span><i class="status-dot ok"></i>正常</span>
+          <span><i class="status-dot degraded"></i>降级</span>
+          <span><i class="status-dot down"></i>离线</span>
+          <span><i class="status-dot unknown"></i>未知</span>
+        </div>
+      </section>
+
+      <section class="panel" id="warning-panel" hidden>
+        <h2>解析提示 <span id="warning-count" class="badge"></span></h2>
+        <div id="warnings" class="warnings"></div>
+      </section>
+
+      <p class="footnote">点击设备查看详情 · 单击空白处取消高亮 · Esc 关闭</p>
+    </aside>
+
+    <main id="stage">
+      <div id="network"></div>
+      <div id="rank-overlay" aria-hidden="true"></div>
+      <div id="filterbar" class="filterbar hidden"></div>
+      <div id="empty" class="empty hidden">当前筛选条件下没有可显示的设备</div>
+      <div id="path-hint" class="path-hint hidden"></div>
+      <div id="detail" class="detail hidden"></div>
+      <div id="toast" class="toast"></div>
+      <button id="btn-exit-fullscreen" class="btn stage-exit" aria-label="退出全屏">✕ 退出全屏</button>
+      <div class="stage-tools">
+        <button id="btn-path" class="tool-btn" title="路径分析：依次点击两台设备">⑃</button>
+        <button id="btn-zoom-in" class="tool-btn" title="放大">＋</button>
+        <button id="btn-zoom-out" class="tool-btn" title="缩小">－</button>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="picker" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+  <div class="modal-backdrop" data-close="1"></div>
+  <div class="modal-card">
+    <header class="modal-head">
+      <div>
+        <h3 id="picker-title">筛选设备与网口</h3>
+        <p>勾选要显示的主机、交换机、存储；展开设备可精确到每一个网口。</p>
+      </div>
+      <button class="close-btn" data-close="1" title="关闭">×</button>
+    </header>
+    <div class="modal-body">
+      <div class="picker-main">
+        <div class="picker-toolbar">
+          <label class="search compact">
+            <span class="search-icon">⌕</span>
+            <input id="pick-search" type="search" placeholder="搜索设备名 / WWN / IP / 端口" autocomplete="off"/>
+          </label>
+          <div class="tabs" id="pick-tabs">
+            <button data-tab="all" class="active">全部</button>
+            <button data-tab="host">主机</button>
+            <button data-tab="switch">交换机</button>
+            <button data-tab="storage">存储</button>
+          </div>
+        </div>
+        <div id="pick-result-bar" class="pick-result-bar hidden">
+          <span id="pick-result-count"></span>
+          <span class="grow"></span>
+          <button class="link-btn" id="pick-result-all" type="button" title="选中匹配设备的全部网口">全选结果</button>
+          <span class="sep">·</span>
+          <button class="link-btn" id="pick-result-none" type="button" title="隐藏匹配的设备">清空结果</button>
+        </div>
+        <div id="pick-list" class="pick-list"></div>
+      </div>
+      <aside class="picker-side">
+        <h4>当前选择</h4>
+        <div id="pick-summary" class="pick-summary"></div>
+        <div id="pick-impact" class="pick-impact"></div>
+        <div class="pick-tip">
+          取消勾选设备 = 隐藏该设备；只勾选部分网口时，该设备的其余链路不会显示。
+          设备类型若在左侧被整体关闭，这里选中后会自动重新开启。
+        </div>
+      </aside>
+    </div>
+    <footer class="modal-foot">
+      <button class="link-btn" id="pick-all">全选全部</button>
+      <span class="sep">·</span>
+      <button class="link-btn" id="pick-none">全不选全部</button>
+      <span class="sep">·</span>
+      <button class="link-btn" id="pick-ports-all">恢复全部网口</button>
+      <span class="grow"></span>
+      <button class="btn" data-close="1">取消</button>
+      <button class="btn primary" id="pick-apply">应用筛选</button>
+    </footer>
+  </div>
+</div>
+
+<div id="matrix" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="matrix-title">
+  <div class="modal-backdrop" data-matrix-close="1"></div>
+  <div class="modal-card matrix-card">
+    <header class="modal-head">
+      <div>
+        <h3 id="matrix-title">端口矩阵</h3>
+        <p id="matrix-sub"></p>
+      </div>
+      <button class="close-btn" id="matrix-close" aria-label="关闭">×</button>
+    </header>
+    <div class="matrix-toolbar">
+      <label class="search compact">
+        <span class="search-icon">⌕</span>
+        <input id="matrix-search" type="search" placeholder="搜索端口 / WWN / 对端" autocomplete="off"/>
+      </label>
+      <label class="matrix-check"><input type="checkbox" id="matrix-only-used"/> 只看已连接</label>
+      <span class="grow"></span>
+      <button class="btn" id="matrix-csv">导出 CSV</button>
+    </div>
+    <div class="matrix-wrap">
+      <table class="matrix-table">
+        <thead>
+          <tr><th>端口</th><th>WWN</th><th>状态</th><th>对端设备</th><th>对端端口</th><th>链路</th><th>链路状态</th></tr>
+        </thead>
+        <tbody id="matrix-body"></tbody>
+      </table>
+    </div>
+    <footer class="matrix-foot"><span id="matrix-count"></span><span>仅展示当前设备的端口</span></footer>
+  </div>
+</div>
+
+<div id="redundancy" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="red-title">
+  <div class="modal-backdrop" data-red-close="1"></div>
+  <div class="modal-card redundancy-card">
+    <header class="modal-head">
+      <div>
+        <h3 id="red-title">冗余分析</h3>
+        <p id="red-sub"></p>
+      </div>
+      <button class="close-btn" id="red-close" aria-label="关闭">×</button>
+    </header>
+    <div class="redundancy-toolbar">
+      <label class="search compact">
+        <span class="search-icon">⌕</span>
+        <input id="red-search" type="search" placeholder="搜索主机 / IP" autocomplete="off"/>
+      </label>
+      <span id="red-summary" class="red-summary"></span>
+      <span class="grow"></span>
+      <button class="btn" id="red-csv">导出 CSV</button>
+    </div>
+    <div class="redundancy-wrap">
+      <table class="redundancy-table">
+        <thead id="red-head"></thead>
+        <tbody id="red-body"></tbody>
+      </table>
+    </div>
+    <footer class="matrix-foot"><span id="red-count"></span><span>基于当前可见设备 / 链路 · 节点不交路径（最多 2 条）</span></footer>
+  </div>
+</div>
+
+<script>/*__VIS__*/</script>
+<script>window.__GRAPH__ = /*__GRAPH__*/;</script>
+<script>/*__APP__*/</script>
+</body>
+</html>
