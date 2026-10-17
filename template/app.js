@@ -88,6 +88,7 @@
     collapseHosts: false,
     autoBundle: true,
     sideTab: 'filter',
+    layout: 'layered',
     expandedGroups: new Set(),
     scope: 'all',
     showUnused: false,
@@ -187,6 +188,7 @@
   var healthCache = new Map();
   function deviceHealth(d) {
     if (!d) return 'unknown';
+    if (d._realId) return deviceHealth(devById.get(d._realId));
     if (d._group) return d._health || 'unknown';
     if (healthCache.has(d.id)) return healthCache.get(d.id);
     var down = 0, up = 0;
@@ -1711,8 +1713,8 @@
     }
   }
 
-  function layout(devices, links, rank) {
-    var rankList = Array.from(new Set(devices.map(function (d) { return rank.get(d.id); }))).sort(function (a, b) { return a - b; });
+  function layout(devices, links, rank, rankListOverride) {
+    var rankList = rankListOverride || Array.from(new Set(devices.map(function (d) { return rank.get(d.id); }))).sort(function (a, b) { return a - b; });
     var rIndex = new Map(rankList.map(function (r, i) { return [r, i]; }));
     var cols = new Map();
     devices.forEach(function (d) {
@@ -1883,6 +1885,8 @@
         _groupSwitch: primaryId,
         _groupSwitchLabel: primary ? primary.label : '',
         _groupHosts: members.map(function (m) { return m.id; }),
+        _plane: primary && primary._plane ? primary._plane : '',
+        _planeLabel: primary && primary._planeLabel ? primary._planeLabel : '',
         _health: worstHealth(members.map(function (m) { return deviceHealth(m); }))
       };
       devById.set(gid, g);
@@ -1909,7 +1913,7 @@
   }
 
   function scopeFields() {
-    return [['site', '站点'], ['fabric', 'Fabric'], ['rack', '机房']];
+    return [['site', '站点'], ['fabric', '网络平面'], ['rack', '机房']];
   }
 
   function parseScope(value) {
@@ -1967,6 +1971,224 @@
     sel.value = state.scope;
   }
 
+  var PLANE_UNGROUPED = '__ungrouped__';
+
+  function normalizePlaneValue(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) return '';
+    s = s.replace(/^(fabric|plane|网络平面|交换网络|网络)\s*[:：\-]?\s*/i, '');
+    return s.trim();
+  }
+
+  function planeLabelFor(key) {
+    return key === PLANE_UNGROUPED ? '未分组' : '网络平面 ' + key;
+  }
+
+  function planeSort(a, b) {
+    if (a === PLANE_UNGROUPED) return 1;
+    if (b === PLANE_UNGROUPED) return -1;
+    return String(a).localeCompare(String(b), 'zh-Hans-CN', { numeric: true });
+  }
+
+  function deviceOwnPlanes(d) {
+    var raw = d.meta && d.meta.fabric;
+    if (raw == null || raw === '') return [];
+    var arr = Array.isArray(raw) ? raw : String(raw).split(/[,\/|+;]+/);
+    var seen = {};
+    return arr.map(normalizePlaneValue).filter(function (p) {
+      if (!p || seen[p]) return false;
+      seen[p] = true;
+      return true;
+    });
+  }
+
+  function buildPlaneView(devices, links) {
+    var explicit = new Map();
+    var neighbors = new Map();
+    devices.forEach(function (d) {
+      explicit.set(d.id, deviceOwnPlanes(d));
+      neighbors.set(d.id, new Set());
+    });
+    links.forEach(function (l) {
+      if (l.a.device === l.b.device) return;
+      if (neighbors.has(l.a.device)) neighbors.get(l.a.device).add(l.b.device);
+      if (neighbors.has(l.b.device)) neighbors.get(l.b.device).add(l.a.device);
+    });
+
+    // Switches without an explicit fabric learn the planes of adjacent devices.
+    // This handles a CMDB that only tags hosts/storage, or a shared core switch.
+    var switchPlanes = new Map();
+    devices.forEach(function (d) {
+      if (d.type === 'switch') switchPlanes.set(d.id, new Set(explicit.get(d.id) || []));
+    });
+    for (var pass = 0; pass < 6; pass++) {
+      var changed = false;
+      devices.forEach(function (d) {
+        if (d.type !== 'switch' || explicit.get(d.id).length) return;
+        var set = switchPlanes.get(d.id);
+        (neighbors.get(d.id) || new Set()).forEach(function (id) {
+          var other = devById.get(id);
+          if (!other) return;
+          var ps = other.type === 'switch' ? switchPlanes.get(id) : new Set(explicit.get(id) || []);
+          (ps || new Set()).forEach(function (p) {
+            if (!set.has(p)) { set.add(p); changed = true; }
+          });
+        });
+      });
+      if (!changed) break;
+    }
+
+    var devicePlanes = new Map();
+    devices.forEach(function (d) {
+      var ps = new Set(explicit.get(d.id) || []);
+      if (d.type === 'switch') {
+        if (!ps.size) ps = new Set(switchPlanes.get(d.id) || []);
+      } else {
+        (neighbors.get(d.id) || new Set()).forEach(function (id) {
+          var other = devById.get(id);
+          if (!other || other.type !== 'switch') return;
+          var swPlanes = explicit.get(id).length ? explicit.get(id) : Array.from(switchPlanes.get(id) || []);
+          // A device with its own fabric only picks up a switch's explicit fabric;
+          // shared switches are used to place untagged storage/hosts.
+          if (!ps.size || explicit.get(id).length) {
+            swPlanes.forEach(function (p) { ps.add(p); });
+          }
+        });
+      }
+      if (!ps.size) ps.add(PLANE_UNGROUPED);
+      devicePlanes.set(d.id, Array.from(ps).sort(planeSort));
+    });
+
+    var lanes = new Map();
+    function ensureLane(key) {
+      if (!lanes.has(key)) {
+        lanes.set(key, { key: key, label: planeLabelFor(key), devices: [], links: [], hostCount: 0 });
+      }
+      return lanes.get(key);
+    }
+    var clones = new Map();
+    var allDevices = [];
+    devices.forEach(function (d) {
+      devicePlanes.get(d.id).forEach(function (plane) {
+        var lane = ensureLane(plane);
+        var gid = 'plane:' + encodeURIComponent(plane) + ':' + d.id;
+        var clone = Object.assign({}, d);
+        clone.id = gid;
+        clone._realId = d.id;
+        clone._plane = plane;
+        clone._planeLabel = lane.label;
+        clone._health = deviceHealth(d);
+        clone._group = false;
+        clone.ips = (d.ips || []).slice();
+        clone.meta = Object.assign({}, d.meta || {});
+        clone.ports = (d.ports || []).map(function (p) {
+          return Object.assign({}, p, { device: gid });
+        });
+        clones.set(plane + '|' + d.id, clone);
+        devById.set(gid, clone);
+        state._planeIds.push(gid);
+        lane.devices.push(clone);
+        allDevices.push(clone);
+        if (d.type === 'host') lane.hostCount++;
+      });
+    });
+
+    var allLinks = [];
+    links.forEach(function (l) {
+      if (l.a.device === l.b.device) return;
+      var pa = devicePlanes.get(l.a.device) || [];
+      var pb = devicePlanes.get(l.b.device) || [];
+      var common = pa.filter(function (p) { return pb.indexOf(p) >= 0; });
+      if (!common.length) return;
+      common.forEach(function (plane) {
+        var a = clones.get(plane + '|' + l.a.device);
+        var b = clones.get(plane + '|' + l.b.device);
+        if (!a || !b) return;
+        var lane = ensureLane(plane);
+        var clone = {
+          a: { device: a.id, port: l.a.port, wwn: l.a.wwn },
+          b: { device: b.id, port: l.b.port, wwn: l.b.wwn },
+          kind: l.kind, status: l.status, speed: l.speed, source: l.source, meta: l.meta
+        };
+        lane.links.push(clone);
+        allLinks.push(clone);
+      });
+    });
+
+    var laneList = Array.from(lanes.values())
+      .filter(function (lane) { return lane.devices.length > 0; })
+      .sort(function (a, b) { return planeSort(a.key, b.key); });
+    return { devices: allDevices, links: allLinks, lanes: laneList };
+  }
+
+  function buildDisplayLanes(devices, links, planeOrder) {
+    var map = new Map();
+    var order = [];
+    (planeOrder || []).forEach(function (key) {
+      map.set(key, { key: key, label: planeLabelFor(key), devices: [], links: [], hostCount: 0 });
+      order.push(key);
+    });
+    devices.forEach(function (d) {
+      var key = d._plane || PLANE_UNGROUPED;
+      if (!map.has(key)) {
+        map.set(key, { key: key, label: planeLabelFor(key), devices: [], links: [], hostCount: 0 });
+        order.push(key);
+      }
+      var lane = map.get(key);
+      lane.devices.push(d);
+      if (d.type === 'host') lane.hostCount++;
+    });
+    links.forEach(function (l) {
+      var a = devById.get(l.a.device);
+      var b = devById.get(l.b.device);
+      if (!a || !b) return;
+      var key = a._plane || b._plane || PLANE_UNGROUPED;
+      if (map.has(key)) map.get(key).links.push(l);
+    });
+    return order.map(function (key) { return map.get(key); })
+      .filter(function (lane) { return lane.devices.length > 0; });
+  }
+
+  function layoutLanes(lanes, ranks, rankList) {
+    var out = {
+      pos: new Map(), portPos: new Map(), sides: new Map(),
+      heights: new Map(), cols: new Map(), compactRanks: new Map(), lanes: []
+    };
+    var cursor = 0;
+    lanes.forEach(function (lane) {
+      var L = layout(lane.devices, lane.links, ranks, rankList);
+      var minY = Infinity, maxY = -Infinity;
+      L.pos.forEach(function (p) {
+        minY = Math.min(minY, p.y - p.h / 2);
+        maxY = Math.max(maxY, p.y + p.h / 2);
+      });
+      if (!isFinite(minY) || !isFinite(maxY)) return;
+      var top = cursor + 38;
+      var offset = top - minY;
+      L.pos.forEach(function (p, id) {
+        out.pos.set(id, { x: p.x, y: p.y + offset, h: p.h, compact: p.compact });
+      });
+      L.portPos.forEach(function (p, id) {
+        out.portPos.set(id, { x: p.x, y: p.y + offset, side: p.side });
+      });
+      L.sides.forEach(function (v, id) { out.sides.set(id, v); });
+      L.heights.forEach(function (v, id) { out.heights.set(id, v); });
+      var bandTop = top - 30;
+      var bandBottom = top + (maxY - minY) + 12;
+      out.lanes.push({
+        key: lane.key,
+        label: lane.label,
+        count: lane.devices.length,
+        hostCount: lane.hostCount,
+        minY: bandTop,
+        maxY: bandBottom,
+        devices: lane.devices
+      });
+      cursor = bandBottom + 44;
+    });
+    return out;
+  }
+
   function computeView() {
     var q = state.query.trim().toLowerCase();
     var hits = new Set();
@@ -2011,21 +2233,43 @@
     var devices = Array.from(visible).map(function (id) { return devById.get(id); });
 
     (state._groupIds || []).forEach(function (id) { devById.delete(id); });
+    (state._planeIds || []).forEach(function (id) { devById.delete(id); });
     state._groupIds = [];
+    state._planeIds = [];
+    state._planeMode = false;
+    var planeLanes = null;
     var displayDevices = devices;
     var displayLinks = links;
-    var hostCount = devices.filter(function (d) { return d.type === 'host'; }).length;
+    if (state.layout === 'plane' && state.gran === 'device' && hasPlaneMeta()) {
+      var planeView = buildPlaneView(devices, links);
+      if (planeView.lanes.length) {
+        displayDevices = planeView.devices;
+        displayLinks = planeView.links;
+        planeLanes = planeView.lanes;
+        state._planeMode = true;
+      }
+    }
+
+    var hostCount = displayDevices.filter(function (d) { return d.type === 'host'; }).length;
     var autoBundled = !!state.autoBundle && !state.collapseHosts && state.gran === 'device' &&
-      links.length >= AUTO_BUNDLE_MIN_LINKS && hostCount >= 20;
+      displayLinks.length >= AUTO_BUNDLE_MIN_LINKS && hostCount >= 20;
     state._autoBundled = autoBundled;
     if ((state.collapseHosts || autoBundled) && state.gran === 'device') {
-      var collapsed = collapseHostGroups(devices, links);
+      var collapsed = collapseHostGroups(displayDevices, displayLinks);
       displayDevices = collapsed.devices;
       displayLinks = collapsed.links;
     }
 
     var ranks = computeRanks(displayDevices, displayLinks);
-    var L = layout(displayDevices, displayLinks, ranks);
+    var L;
+    if (state._planeMode) {
+      var planeOrder = planeLanes.map(function (lane) { return lane.key; });
+      planeLanes = buildDisplayLanes(displayDevices, displayLinks, planeOrder);
+      var rankList = Array.from(new Set(Array.from(ranks.values()))).sort(function (a, b) { return a - b; });
+      L = layoutLanes(planeLanes, ranks, rankList);
+    } else {
+      L = layout(displayDevices, displayLinks, ranks);
+    }
 
     var nodes = [];
     displayDevices.forEach(function (d) {
@@ -2039,7 +2283,8 @@
         y: p.y,
         title: deviceTitle(d),
         _kind: 'device',
-        _device: d.id,
+        _device: isGroup ? d.id : (d._realId || d.id),
+        _plane: d._plane || null,
         _type: d.type,
         _w: isGroup ? COMPACT_W : (p.compact ? COMPACT_W : CARD_W),
         _h: isGroup ? COMPACT_H : p.h,
@@ -2086,6 +2331,11 @@
       return a < b ? a + '|' + b : b + '|' + a;
     }
 
+    function realDeviceId(id) {
+      var d = devById.get(id);
+      return d && d._realId ? d._realId : id;
+    }
+
     var edges = [];
     var madePairs = new Set();
 
@@ -2109,7 +2359,7 @@
           color: { color: color, highlight: color, hover: color },
           title: edgeTitle([l]),
           _links: [l],
-          _pair: pairKey(l.a.device, l.b.device),
+          _pair: pairKey(realDeviceId(l.a.device), realDeviceId(l.b.device)),
           _baseColor: color,
           _baseWidth: lh === 'down' ? 2.2 : 1.6,
           _health: lh
@@ -2144,7 +2394,7 @@
           label: '',
           title: edgeTitle(item.links),
           _links: item.links,
-          _pair: key,
+          _pair: pairKey(realDeviceId(item.a), realDeviceId(item.b)),
           _baseColor: color,
           _baseWidth: width,
           _health: aggHealth
@@ -2160,6 +2410,7 @@
       var members = (d._groupHosts || []).map(function (id) { return devById.get(id); }).filter(Boolean);
       var names = members.slice(0, 10).map(function (m) { return m.label; });
       var lines = ['主机组', d._groupCount + ' 台主机'];
+      if (d._planeLabel) lines.push('网络平面: ' + d._planeLabel);
       if (d._groupSwitchLabel) lines.push('接入: ' + d._groupSwitchLabel);
       lines.push('健康: ' + (HEALTH_LABEL[d._health] || '未知'));
       lines.push('成员: ' + names.join('、') + (members.length > names.length ? ' …' : ''));
@@ -2168,6 +2419,7 @@
     var lines = [];
     lines.push(d.type === 'unknown' ? '未识别设备' : d.label);
     lines.push(TYPE_LABEL[d.type] + (d.type === 'switch' ? ' · 第 ' + switchLayer(d) + ' 层' : ''));
+    if (d._planeLabel) lines.push('网络平面: ' + d._planeLabel);
     if (d.wwn) lines.push('WWN: ' + d.wwn);
     (d.ips || []).forEach(function (ip) { lines.push('IP: ' + ip); });
     lines.push('端口: ' + d.ports.length + ' 个，已连接 ' +
@@ -2280,12 +2532,70 @@
     return { cls: 'mixed', label: '混合', count: devices.length + ' 台' };
   }
 
+  function planeAccent(key) {
+    if (key === PLANE_UNGROUPED) return healthColors().unknown;
+    var s = String(key).toLowerCase();
+    if (s.indexOf('a') === 0) return '#3b82f6';
+    if (s.indexOf('b') === 0) return '#f59e0b';
+    return '#64748b';
+  }
+
+  function planeClass(key) {
+    if (key === PLANE_UNGROUPED) return 'plane-other';
+    var s = String(key).toLowerCase();
+    if (s.indexOf('a') === 0) return 'plane-a';
+    if (s.indexOf('b') === 0) return 'plane-b';
+    return 'plane-other';
+  }
+
+  function setupPlaneOverlay(view) {
+    var overlay = $('#rank-overlay');
+    if (!overlay) return;
+    overlay.innerHTML = '';
+    rankCols = [];
+    view.layout.lanes.forEach(function (lane) {
+      var nodes = state.nodes.filter(function (n) { return n._plane === lane.key; });
+      if (!nodes.length) return;
+      var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      nodes.forEach(function (n) {
+        minX = Math.min(minX, n.x - n._w / 2);
+        maxX = Math.max(maxX, n.x + n._w / 2);
+        minY = Math.min(minY, n.y - n._h / 2);
+        maxY = Math.max(maxY, n.y + n._h / 2);
+      });
+      var groupCount = lane.devices.filter(function (d) { return !!d._group; }).length;
+      var count = groupCount ? groupCount + ' 组主机' : (lane.hostCount ? lane.hostCount + ' 台主机' : lane.count + ' 个节点');
+      var band = document.createElement('div');
+      band.className = 'rank-band plane ' + planeClass(lane.key);
+      var label = document.createElement('div');
+      label.className = 'rank-label plane-label ' + planeClass(lane.key);
+      label.innerHTML = '<i class="dot"></i>' + esc(lane.label) + ' <span>' + esc(count) + '</span>';
+      overlay.appendChild(band);
+      overlay.appendChild(label);
+      rankCols.push({
+        kind: 'lane',
+        planeKey: lane.key,
+        accent: planeAccent(lane.key),
+        band: band,
+        label: label,
+        meta: { label: lane.label, count: count },
+        minX: minX - 18, maxX: maxX + 18,
+        minY: lane.minY, maxY: lane.maxY
+      });
+    });
+  }
+
   function setupRankOverlay(view) {
     var overlay = $('#rank-overlay');
     if (!overlay) return;
     overlay.innerHTML = '';
     rankCols = [];
-    if (!view || !view.layout || !view.layout.cols || !state.nodes.length) return;
+    if (!view || !view.layout || !state.nodes.length) return;
+    if (view.layout.lanes && view.layout.lanes.length) {
+      setupPlaneOverlay(view);
+      return;
+    }
+    if (!view.layout.cols) return;
     var nodeByDev = new Map();
     state.nodes.forEach(function (n) { nodeByDev.set(n._device, n); });
     view.layout.cols.forEach(function (devices) {
@@ -2333,7 +2643,7 @@
       var w = Math.abs(b.x - a.x) * k;
       var h = Math.abs(b.y - a.y) * k;
       var base = pal[c.meta.cls === 'mixed' ? 'unknown' : c.meta.cls] || pal.unknown;
-      var accent = base.accent;
+      var accent = c.accent || base.accent;
       ctx.save();
       ctx.beginPath();
       if (shadcn) {
@@ -2348,7 +2658,7 @@
       ctx.lineWidth = Math.max(1, u);
       ctx.stroke();
 
-      if (w / u < 64 || window.innerWidth <= 760) { ctx.restore(); return; }
+      if ((c.kind === 'lane' ? w / u < 120 : w / u < 64) || window.innerWidth <= 760) { ctx.restore(); return; }
       var fontSize = 10 * u;
       ctx.font = '600 ' + fontSize + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif';
       var tw = ctx.measureText(c.meta.label).width;
@@ -2358,8 +2668,8 @@
       var gap = 5 * u;
       var lw = pad * 2 + dot + gap + tw + gap + cw;
       var lh = 18 * u;
-      var lx = x + w / 2 - lw / 2;
-      var ly = Math.max(4 * u, y - 23 * u);
+      var lx = c.kind === 'lane' ? x + 12 * u : x + w / 2 - lw / 2;
+      var ly = c.kind === 'lane' ? y + 5 * u : Math.max(4 * u, y - 23 * u);
       ctx.beginPath();
       ctx.fillStyle = panel;
       ctx.strokeStyle = border;
@@ -2398,11 +2708,18 @@
       c.band.style.top = top + 'px';
       c.band.style.width = Math.max(10, w) + 'px';
       c.band.style.height = Math.max(10, h) + 'px';
-      var show = w >= 64;
+      var show = c.kind === 'lane' ? w >= 120 : w >= 64;
       c.label.style.display = show ? 'flex' : 'none';
       if (show) {
-        c.label.style.left = (left + w / 2) + 'px';
-        c.label.style.top = Math.max(6, top - 23) + 'px';
+        if (c.kind === 'lane') {
+          c.label.style.transform = 'none';
+          c.label.style.left = (left + 12) + 'px';
+          c.label.style.top = (top + 6) + 'px';
+        } else {
+          c.label.style.transform = 'translateX(-50%)';
+          c.label.style.left = (left + w / 2) + 'px';
+          c.label.style.top = Math.max(6, top - 23) + 'px';
+        }
       }
     });
   }
@@ -2465,8 +2782,13 @@
       if (path) dim = !path.has(n.id);
       else if (focus) dim = !focus.has(n.id);
       var nd = devById.get(n._device);
+      function idHit(id) {
+        if (hits.has(id)) return true;
+        var hd = devById.get(id);
+        return !!(hd && hd._realId && hits.has(hd._realId));
+      }
       var hit = !!hits && hits.size > 0 && (hits.has(n._device) ||
-        !!(nd && nd._group && nd._groupHosts && nd._groupHosts.some(function (id) { return hits.has(id); })));
+        !!(nd && nd._group && nd._groupHosts && nd._groupHosts.some(idHit)));
       nodeFlags.set(n.id, {
         dim: dim,
         hit: !dim && hit,
@@ -2698,6 +3020,48 @@
     }).join('');
   }
 
+  function hasPlaneMeta() {
+    return G.devices.some(function (d) {
+      return d.meta && d.meta.fabric != null && String(d.meta.fabric).trim() !== '';
+    });
+  }
+
+  function syncLayoutButtons() {
+    var planeAvailable = state.gran === 'device' && hasPlaneMeta();
+    $$('#layout-switch [data-layout]').forEach(function (btn) {
+      var on = btn.getAttribute('data-layout') === state.layout;
+      btn.classList.toggle('active', on);
+      btn.disabled = btn.getAttribute('data-layout') === 'plane' && !planeAvailable;
+    });
+    var planeBtn = $('#layout-switch [data-layout="plane"]');
+    if (planeBtn) {
+      planeBtn.title = !hasPlaneMeta()
+        ? '当前数据没有 meta.fabric'
+        : (state.gran !== 'device' ? '网络平面布局仅设备视图可用' : '按网络平面分带');
+    }
+    var hint = $('#layout-hint');
+    if (hint) {
+      hint.textContent = !hasPlaneMeta()
+        ? '当前数据没有 meta.fabric，网络平面布局不可用。'
+        : (state.gran !== 'device'
+          ? '网络平面布局仅设备视图可用。'
+          : '按 meta.fabric 分带；共享设备会复制到多个平面。');
+    }
+  }
+
+  function setLayout(name) {
+    if (name !== 'plane' && name !== 'layered') return;
+    if (name === 'plane' && (state.gran !== 'device' || !hasPlaneMeta())) {
+      toast(!hasPlaneMeta() ? '当前数据没有 meta.fabric' : '网络平面布局仅设备视图可用');
+      return;
+    }
+    if (state.layout === name) return;
+    state.layout = name;
+    try { localStorage.setItem('topo-layout', state.layout); } catch (e) { /* ignore */ }
+    syncLayoutButtons();
+    rebuild();
+  }
+
   function setSideTab(name, focus) {
     if (['filter', 'display', 'info'].indexOf(name) < 0) name = 'filter';
     state.sideTab = name;
@@ -2730,6 +3094,7 @@
     var autoRow = $('#autobundle-row');
     if (autoCb) autoCb.disabled = state.gran !== 'device';
     if (autoRow) autoRow.classList.toggle('disabled', state.gran !== 'device');
+    syncLayoutButtons();
   }
 
   /* ------------------------------------------------------------------ */
@@ -3127,6 +3492,7 @@
     var rows = [];
     rows.push('<div class="kv">');
     rows.push('<dt>类型</dt><dd>主机组</dd>');
+    if (d._planeLabel) rows.push('<dt>网络平面</dt><dd>' + esc(d._planeLabel) + '</dd>');
     rows.push('<dt>健康</dt><dd><span class="status-dot ' + (d._health || 'unknown') + '"></span>' + (HEALTH_LABEL[d._health] || '未知') + '</dd>');
     rows.push('<dt>接入交换机</dt><dd>' + esc(switchLabel) + '</dd>');
     rows.push('<dt>主机数量</dt><dd>' + members.length + ' 台</dd>');
@@ -3447,6 +3813,7 @@
       (d.type === 'switch' ? ' · 第 ' + switchLayer(d) + ' 层' : '') + '</dd>');
     var dh = deviceHealth(d);
     rows.push('<dt>健康</dt><dd><span class="status-dot ' + dh + '"></span>' + (HEALTH_LABEL[dh] || '未知') + '</dd>');
+    if (node._plane) rows.push('<dt>网络平面</dt><dd>' + esc(node._plane) + '</dd>');
     if (isPort) {
       rows.push('<dt>所属设备</dt><dd>' + esc(d.label) + '</dd>');
       rows.push('<dt>端口</dt><dd>' + esc(port.label) + '</dd>');
@@ -3882,6 +4249,14 @@
         else if (e.key === 'End') idx = tabs.length - 1;
         else idx = (idx + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
         setSideTab(tabs[idx].getAttribute('data-side-tab'), true);
+      });
+    }
+
+    var layoutSwitch = $('#layout-switch');
+    if (layoutSwitch) {
+      layoutSwitch.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-layout]');
+        if (btn && !btn.disabled) setLayout(btn.getAttribute('data-layout'));
       });
     }
 
@@ -4398,7 +4773,7 @@
   function exportInventory(kind) {
     var date = new Date().toISOString().slice(0, 10);
     if (kind === 'devices') {
-      var dhead = ['类型', '名称', 'ID', 'WWN', 'IP', '端口数', '已连接端口', '健康', '厂商', '型号', '站点', 'Fabric', '机房'];
+      var dhead = ['类型', '名称', 'ID', 'WWN', 'IP', '端口数', '已连接端口', '健康', '厂商', '型号', '站点', '网络平面', '机房'];
       var drows = G.devices.map(function (d) {
         return [
           TYPE_LABEL[d.type] || d.type,
@@ -4686,6 +5061,8 @@
       if (saved === 'shadcn' || saved === 'line' || saved === 'skeuo') state.style = saved;
       var savedShell = localStorage.getItem('topo-shell');
       if (savedShell === 'classic' || savedShell === 'shadcn') state.shell = savedShell;
+      var savedLayout = localStorage.getItem('topo-layout');
+      if (savedLayout === 'plane' && hasPlaneMeta()) state.layout = 'plane';
       if (localStorage.getItem('topo-sidebar-collapsed') === '1') document.body.classList.add('sidebar-collapsed');
     } catch (e) { /* ignore */ }
     applyShell(state.shell);
@@ -4696,6 +5073,7 @@
     bindUI();
     setSideTab(state.sideTab || 'filter');
     syncStyleButtons();
+    syncLayoutButtons();
     syncSidebarButton();
     rebuild();
     if (document.body.classList.contains('sidebar-collapsed') && window.matchMedia('(min-width: 901px)').matches) {

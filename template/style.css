@@ -1850,3 +1850,59 @@ body.shell-shadcn.dark .rank-band {
   border-top: 0;
   border-bottom: 1px solid var(--border);
 }
+
+
+/* layout switch in the view tab */
+.layout-row {
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border);
+}
+#layout-switch button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* network plane lane bands */
+.rank-band.plane { border-radius: 16px; }
+.rank-band.plane-a {
+  background: rgba(59, 130, 246, 0.035);
+  border-color: rgba(59, 130, 246, 0.12);
+}
+.rank-band.plane-b {
+  background: rgba(245, 158, 11, 0.035);
+  border-color: rgba(245, 158, 11, 0.12);
+}
+.rank-band.plane-other {
+  background: rgba(100, 116, 139, 0.03);
+  border-color: rgba(100, 116, 139, 0.10);
+}
+body.dark .rank-band.plane-a {
+  background: rgba(96, 165, 250, 0.05);
+  border-color: rgba(96, 165, 250, 0.15);
+}
+body.dark .rank-band.plane-b {
+  background: rgba(251, 191, 36, 0.045);
+  border-color: rgba(251, 191, 36, 0.14);
+}
+body.dark .rank-band.plane-other {
+  background: rgba(148, 163, 184, 0.04);
+  border-color: rgba(148, 163, 184, 0.12);
+}
+body.shell-shadcn .rank-band.plane {
+  background: rgba(113, 113, 122, 0.025);
+  border-color: rgba(113, 113, 122, 0.08);
+}
+body.shell-shadcn.dark .rank-band.plane {
+  background: rgba(250, 250, 250, 0.022);
+  border-color: rgba(250, 250, 250, 0.07);
+}
+.rank-label.plane-label {
+  transform: none;
+  font-size: 10.5px;
+  font-weight: 650;
+  padding: 4px 9px;
+}
+.rank-label.plane-a .dot { background: #3b82f6; }
+.rank-label.plane-b .dot { background: #f59e0b; }
+.rank-label.plane-other .dot { background: #64748b; }

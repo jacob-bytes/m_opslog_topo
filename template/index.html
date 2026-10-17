@@ -206,6 +206,14 @@
           <button data-gran="port">端口视图</button>
         </div>
         <p class="hint" id="gran-hint">按设备查看结构，多网口聚合为一条链路。</p>
+        <div class="style-row layout-row">
+          <span class="style-label">布局</span>
+          <div class="style-switch block" id="layout-switch" data-layout-group aria-label="布局">
+            <button data-layout="layered" class="active">横向分层</button>
+            <button data-layout="plane">网络平面</button>
+          </div>
+        </div>
+        <p class="hint" id="layout-hint">按 meta.fabric 分带；仅设备视图。</p>
       </section>
       <section class="panel">
         <h2>显示选项</h2>
