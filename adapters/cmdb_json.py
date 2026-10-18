@@ -33,6 +33,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
+MAX_INPUT_BYTES = 64 * 1024 * 1024
+
 TYPE_MAP = {
     "host": "host", "server": "host", "主机": "host",
     "switch": "switch", "san_switch": "switch", "交换机": "switch",
@@ -77,7 +79,12 @@ def build(input_path: Optional[str] = None) -> Dict[str, Any]:
     if not input_path:
         raise ValueError("CMDB 适配器需要 --adapter-input 指向 JSON 文件")
     path = Path(input_path)
-    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        if path.stat().st_size > MAX_INPUT_BYTES:
+            raise ValueError(f"CMDB JSON 超过大小上限 {MAX_INPUT_BYTES} 字节")
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ValueError(f"无法读取 CMDB JSON：{exc}") from exc
     if not isinstance(data, dict):
         raise ValueError("CMDB JSON 根节点必须是对象")
 

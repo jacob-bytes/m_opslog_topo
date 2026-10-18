@@ -3184,7 +3184,7 @@
     if (!chips.length) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
     bar.classList.remove('hidden');
     bar.innerHTML = chips.map(function (c) {
-      return '<span class="fchip">' + c.html + '<span class="x" data-fclear="' + c.key + '" title="移除该筛选">×</span></span>';
+      return '<span class="fchip">' + c.html + '<span class="x" data-fclear="' + esc(c.key) + '" title="移除该筛选">×</span></span>';
     }).join('') + '<button class="fchip-clear" data-fclear="all">清除全部筛选</button>';
   }
 
@@ -3201,7 +3201,8 @@
     $('#warning-count').textContent = ws.length;
     $('#warnings').innerHTML = ws.slice(0, 100).map(function (w) {
       var dev = w.device && devById.has(w.device) ? ' data-device="' + esc(w.device) + '"' : '';
-      return '<div class="warn-item ' + (w.level || 'info') + '"' + dev + '>' + esc(w.msg) + '</div>';
+      var level = ['info', 'warn', 'error'].indexOf(w.level) >= 0 ? w.level : 'info';
+      return '<div class="warn-item ' + level + '"' + dev + '>' + esc(w.msg) + '</div>';
     }).join('');
   }
 
@@ -4313,11 +4314,7 @@
   function exportMatrixCsv() {
     if (!matrix.device) return;
     var header = ['端口', 'WWN', '状态', '对端设备', '对端端口', '链路', '链路状态'];
-    function cell(v) {
-      v = v == null ? '' : String(v);
-      return '"' + v.replace(/"/g, '""') + '"';
-    }
-    var lines = [header.map(cell).join(',')];
+    var lines = [header.map(csvCell).join(',')];
     matrix.rows.forEach(function (r) {
       lines.push([
         r.p.label,
@@ -4327,12 +4324,12 @@
         r.peerPort ? r.peerPort.label : '',
         r.kind ? (KIND_LABEL[r.kind] || r.kind) : '',
         r.status || ''
-      ].map(cell).join(','));
+      ].map(csvCell).join(','));
     });
     var blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'port-matrix-' + matrix.device.label + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.download = safeDownloadName('port-matrix-' + matrix.device.label + '-' + new Date().toISOString().slice(0, 10) + '.csv');
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
     toast('已导出 CSV');
@@ -5461,7 +5458,17 @@
 
   function csvCell(v) {
     v = v == null ? '' : String(v);
+    // Excel/Sheets formula injection guard.
+    if (/^[=+\-@\t\r]/.test(v)) v = "'" + v;
     return '"' + v.replace(/"/g, '""') + '"';
+  }
+
+  function safeDownloadName(name) {
+    return String(name == null ? '' : name)
+      .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120) || 'export';
   }
 
   function downloadCsv(filename, header, rows) {
@@ -5470,7 +5477,7 @@
     var blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = filename;
+    a.download = safeDownloadName(filename);
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
     toast('已导出 ' + filename);

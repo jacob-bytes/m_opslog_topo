@@ -9,7 +9,30 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Syntax and unit tests
+        run: |
+          python3 -m py_compile topo.py
+          node --check template/app.js
+          python3 -m unittest discover -s tests -v
+
   release:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

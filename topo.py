@@ -25,11 +25,14 @@ topo.py —— 存储 / SAN 网络拓扑图生成器
 from __future__ import annotations
 
 import argparse
+import html as html_lib
 import importlib
 import importlib.util
 import json
+import os
 import re
 import sys
+import tempfile
 import webbrowser
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -52,6 +55,20 @@ TYPE_ALIASES = {
 }
 TYPE_LABEL = {"host": "主机", "switch": "交换机", "storage": "存储", "unknown": "未识别"}
 SCHEMA_VERSION = "1.0"
+
+# 防御性默认上限。真实数据量大时用 CLI 参数显式放开。
+DEFAULT_MAX_LOG_BYTES = 64 * 1024 * 1024
+DEFAULT_MAX_FILES = 1000
+DEFAULT_MAX_GRAPH_BYTES = 64 * 1024 * 1024
+DEFAULT_MAX_DEVICES = 20000
+DEFAULT_MAX_PORTS = 200000
+DEFAULT_MAX_LINKS = 500000
+DEFAULT_MAX_WARNINGS = 5000
+DEFAULT_MAX_TITLE = 200
+
+
+class LimitError(ValueError):
+    """输入/输出超过安全上限。"""
 
 ID_KEYS = {
     "id", "name", "hostname", "host_id", "hostid", "host_name", "storage_id",
@@ -217,16 +234,27 @@ class Link:
 class Ctx:
     """解析上下文：设备表 + 各类索引 + 告警。"""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        max_text_bytes: int = DEFAULT_MAX_LOG_BYTES,
+        max_devices: int = DEFAULT_MAX_DEVICES,
+        max_warnings: int = DEFAULT_MAX_WARNINGS,
+    ) -> None:
         self.devices: Dict[str, Device] = {}
         self.warnings: List[Dict[str, Any]] = []
         self.links: List[Link] = []
         self.sources: List[str] = []
         self.wwn_index: Dict[str, Tuple[Device, Port]] = {}
         self.switch_wwn_index: Dict[str, Device] = {}
+        self.max_text_bytes = max_text_bytes
+        self.max_devices = max_devices
+        self.max_warnings = max_warnings
+        self.warnings_truncated = False
 
     # -- 设备 ------------------------------------------------------------
     def new_device(self, dtype: str, name: str, source: str = "") -> Device:
+        if len(self.devices) >= self.max_devices:
+            raise LimitError(f"设备数量超过上限 {self.max_devices}，请提高 --max-devices 或检查输入")
         dtype = dtype if dtype in TYPE_LABEL else "unknown"
         name = (name or "").strip() or f"unnamed-{len(self.devices) + 1}"
         base = f"{dtype}:{name}"
@@ -256,6 +284,16 @@ class Ctx:
 
     # -- 告警 ------------------------------------------------------------
     def warn(self, msg: str, level: str = "warn", **extra: Any) -> None:
+        if level not in ("info", "warn", "error"):
+            level = "warn"
+        if len(self.warnings) >= self.max_warnings:
+            if not self.warnings_truncated:
+                self.warnings.append({
+                    "level": "warn",
+                    "msg": f"告警数量超过上限 {self.max_warnings}，后续告警已省略",
+                })
+                self.warnings_truncated = True
+            return
         item: Dict[str, Any] = {"level": level, "msg": msg}
         item.update(extra)
         self.warnings.append(item)
@@ -266,14 +304,30 @@ class Ctx:
 # ---------------------------------------------------------------------------
 
 
-def read_text(path: Path) -> str:
+def read_text(path: Path, max_bytes: Optional[int] = None) -> str:
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        raise ValueError(f"无法读取文件 {path}: {exc}") from exc
+    if max_bytes is not None and size > max_bytes:
+        raise LimitError(f"文件 {path.name} 超过大小上限 {max_bytes} 字节")
     raw = path.read_bytes()
+    if max_bytes is not None and len(raw) > max_bytes:
+        raise LimitError(f"文件 {path.name} 超过大小上限 {max_bytes} 字节")
     for enc in ("utf-8-sig", "utf-8", "gb18030", "gbk", "latin-1"):
         try:
             return raw.decode(enc)
         except UnicodeDecodeError:
             continue
     return raw.decode("utf-8", errors="replace")
+
+
+def redact_path_value(value: Any) -> Any:
+    if isinstance(value, list):
+        return [redact_path_value(v) for v in value]
+    if isinstance(value, str):
+        return os.path.basename(value.rstrip("/\\")) or value
+    return value
 
 
 def strip_comment(line: str) -> str:
@@ -389,7 +443,7 @@ def looks_tabular(lines: List[str]) -> Optional[str]:
 
 
 def parse_config_tabular(path: Path, ctx: Ctx) -> None:
-    text = read_text(path)
+    text = read_text(path, ctx.max_text_bytes)
     lines = text.splitlines()
     delim = looks_tabular(lines) or ","
     rows: List[List[str]] = []
@@ -478,7 +532,7 @@ def _split_type_name(text: str) -> Tuple[Optional[str], Optional[str]]:
 
 
 def parse_config_blocks(path: Path, ctx: Ctx) -> None:
-    text = read_text(path)
+    text = read_text(path, ctx.max_text_bytes)
     raw_lines = text.splitlines()
 
     blocks: List[Dict[str, Any]] = []
@@ -658,7 +712,7 @@ def parse_config_blocks(path: Path, ctx: Ctx) -> None:
 
 
 def parse_config(path: Path, ctx: Ctx) -> None:
-    text = read_text(path)
+    text = read_text(path, ctx.max_text_bytes)
     if looks_tabular(text.splitlines()):
         parse_config_tabular(path, ctx)
     else:
@@ -775,9 +829,9 @@ def _parse_table_rows(lines: List[str], ctx: Ctx) -> Tuple[List[RawPortRecord], 
     return records, consumed
 
 
-def extract_switch_identity(path: Path) -> Dict[str, Any]:
+def extract_switch_identity(path: Path, max_bytes: Optional[int] = None) -> Dict[str, Any]:
     """从日志中提取交换机自身身份（名称 / WWN / IP / 型号）。"""
-    text = read_text(path)
+    text = read_text(path, max_bytes)
     ident: Dict[str, Any] = {"name": None, "wwn": None, "ip": None, "model": None}
     for raw in text.splitlines():
         line = strip_comment(raw).strip()
@@ -811,7 +865,7 @@ def extract_switch_identity(path: Path) -> Dict[str, Any]:
 def prescan_switch_identities(paths: List[Path], ctx: Ctx) -> None:
     """先登记所有交换机的名称和 WWN，保证级联链路能双向解析。"""
     for path in paths:
-        ident = extract_switch_identity(path)
+        ident = extract_switch_identity(path, ctx.max_text_bytes)
         name = ident["name"] or path.stem
         dev = ctx.find_device("switch", name)
         if not dev:
@@ -832,13 +886,13 @@ def prescan_switch_identities(paths: List[Path], ctx: Ctx) -> None:
 
 
 def parse_switch_log(path: Path, ctx: Ctx) -> Optional[Device]:
-    ident = extract_switch_identity(path)
+    ident = extract_switch_identity(path, ctx.max_text_bytes)
     sw_wwn = ident["wwn"]
     sw_name = ident["name"]
     sw_ip = ident["ip"]
     sw_model = ident["model"]
 
-    text = read_text(path)
+    text = read_text(path, ctx.max_text_bytes)
     lines = text.splitlines()
 
     if not sw_name:
@@ -1325,6 +1379,21 @@ def build_payload(ctx: Ctx, args: argparse.Namespace) -> Dict[str, Any]:
             device=item["device"],
         )
 
+    max_devices = getattr(args, "max_devices", DEFAULT_MAX_DEVICES)
+    max_ports = getattr(args, "max_ports", DEFAULT_MAX_PORTS)
+    max_links = getattr(args, "max_links", DEFAULT_MAX_LINKS)
+    if len(dev_json) > max_devices:
+        raise LimitError(f"设备数量超过上限 {max_devices}，请提高 --max-devices")
+    if final_ports > max_ports:
+        raise LimitError(f"端口数量超过上限 {max_ports}，请提高 --max-ports")
+    if len(link_json) > max_links:
+        raise LimitError(f"链路数量超过上限 {max_links}，请提高 --max-links")
+
+    def source_value(value: Any) -> Any:
+        if getattr(args, "redact_paths", False) and isinstance(value, str):
+            return os.path.basename(value.rstrip("/\\")) or value
+        return value
+
     stats = {
         "hosts": final_counts.get("host", 0),
         "switches": final_counts.get("switch", 0),
@@ -1341,8 +1410,8 @@ def build_payload(ctx: Ctx, args: argparse.Namespace) -> Dict[str, Any]:
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "generator": "topo.py",
         "sources": {
-            "config": str(args.config),
-            "logs": [str(p) for p in ctx.sources],
+            "config": source_value(str(args.config)),
+            "logs": [source_value(str(p)) for p in ctx.sources],
         },
         "stats": stats,
         "devices": dev_json,
@@ -1371,7 +1440,14 @@ def _kind_from_types(a_type: str, b_type: str) -> str:
     return "other"
 
 
-def normalize_graph(payload: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_graph(
+    payload: Dict[str, Any],
+    max_devices: int = DEFAULT_MAX_DEVICES,
+    max_ports: int = DEFAULT_MAX_PORTS,
+    max_links: int = DEFAULT_MAX_LINKS,
+    max_warnings: int = DEFAULT_MAX_WARNINGS,
+    redact_paths: bool = False,
+) -> Dict[str, Any]:
     """把外部构造的图数据补齐成渲染器能直接消费的稳定结构。
 
     只依赖 schema_version / devices / links 这几个字段，其余业务字段原样保留，
@@ -1392,17 +1468,36 @@ def normalize_graph(payload: Dict[str, Any]) -> Dict[str, Any]:
         links = []
     if not isinstance(links, list):
         raise ValueError("links 必须是数组")
+    if len(devices) > max_devices:
+        raise LimitError(f"设备数量超过上限 {max_devices}，请提高 --max-devices")
+    if len(links) > max_links:
+        raise LimitError(f"链路数量超过上限 {max_links}，请提高 --max-links")
 
     note = f"由中间产物渲染（schema {version}）"
-    warnings: List[Dict[str, Any]] = [
-        w for w in (payload.get("warnings") or [])
-        if not (isinstance(w, dict) and str(w.get("msg", "")).startswith("由中间产物渲染"))
-    ]
+    warnings: List[Dict[str, Any]] = []
+    for raw_warning in (payload.get("warnings") or []):
+        if not isinstance(raw_warning, dict):
+            continue
+        if str(raw_warning.get("msg", "")).startswith("由中间产物渲染"):
+            continue
+        level = str(raw_warning.get("level") or "info").lower()
+        if level not in ("info", "warn", "error"):
+            level = "info"
+        item = dict(raw_warning)
+        item["level"] = level
+        if redact_paths and isinstance(item.get("source"), str):
+            item["source"] = redact_path_value(item["source"])
+        warnings.append(item)
+        if len(warnings) >= max_warnings:
+            warnings.append({"level": "warn", "msg": f"告警数量超过上限 {max_warnings}，后续告警已省略"})
+            break
     warnings.append({"level": "info", "msg": note})
 
     valid_types = set(TYPE_LABEL)
     dev_by_id: Dict[str, Dict[str, Any]] = {}
     known_port_ids: Set[str] = set()
+    seen_device_ids: Set[str] = set()
+    port_total_seen = 0
 
     for idx, raw in enumerate(devices):
         if not isinstance(raw, dict):
@@ -1413,12 +1508,18 @@ def normalize_graph(payload: Dict[str, Any]) -> Dict[str, Any]:
             did = f"device-{idx + 1}"
             raw["id"] = did
         raw["id"] = did
+        if did in seen_device_ids:
+            warnings.append({"level": "warn", "msg": f"设备 id 重复：{did}，后出现的记录已忽略"})
+            continue
+        seen_device_ids.add(did)
         dtype = str(raw.get("type") or "unknown").lower()
         if dtype not in valid_types:
             warnings.append({"level": "warn", "msg": f"设备 {did} 的类型 {dtype} 未识别，按 unknown 处理"})
             dtype = "unknown"
         raw["type"] = dtype
         raw["label"] = str(raw.get("label") or did)
+        if redact_paths and isinstance(raw.get("source"), str):
+            raw["source"] = redact_path_value(raw["source"])
         raw["wwn"] = raw.get("wwn") or None
         if not isinstance(raw.get("ips"), list):
             raw["ips"] = [raw["ips"]] if raw.get("ips") else []
@@ -1434,6 +1535,9 @@ def normalize_graph(payload: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(ports, list):
             ports = []
         raw["ports"] = ports
+        port_total_seen += len([p for p in ports if isinstance(p, dict)])
+        if port_total_seen > max_ports:
+            raise LimitError(f"端口数量超过上限 {max_ports}，请提高 --max-ports")
         seen_labels = set()
         for pi, port in enumerate(ports):
             if not isinstance(port, dict):
@@ -1447,6 +1551,8 @@ def normalize_graph(payload: Dict[str, Any]) -> Dict[str, Any]:
             seen_labels.add(label)
             port["label"] = label
             pid = str(port.get("id") or f"{did}#{label}")
+            if pid in known_port_ids:
+                warnings.append({"level": "warn", "msg": f"端口 id 重复：{pid}，已自动改名"})
             while pid in known_port_ids:
                 pid = f"{pid}-{pi + 1}"
             port["id"] = pid
@@ -1489,6 +1595,8 @@ def normalize_graph(payload: Dict[str, Any]) -> Dict[str, Any]:
         link["status"] = link.get("status") or None
         link["speed"] = link.get("speed") or None
         link["source"] = link.get("source") or ""
+        if redact_paths and isinstance(link["source"], str):
+            link["source"] = redact_path_value(link["source"])
         if not isinstance(link.get("meta"), dict):
             link["meta"] = {}
         clean_links.append(link)
@@ -1516,6 +1624,10 @@ def normalize_graph(payload: Dict[str, Any]) -> Dict[str, Any]:
     payload["generator"] = payload.get("generator") or "external"
     if not isinstance(payload.get("sources"), dict):
         payload["sources"] = {"config": None, "logs": []}
+    if redact_paths:
+        src = payload["sources"]
+        src["config"] = redact_path_value(src.get("config"))
+        src["logs"] = redact_path_value(src.get("logs") or [])
     payload["stats"] = {
         "hosts": counts.get("host", 0),
         "switches": counts.get("switch", 0),
@@ -1528,12 +1640,27 @@ def normalize_graph(payload: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
-def load_graph(path: Path) -> Dict[str, Any]:
+def load_graph(
+    path: Path,
+    max_bytes: int = DEFAULT_MAX_GRAPH_BYTES,
+    max_devices: int = DEFAULT_MAX_DEVICES,
+    max_ports: int = DEFAULT_MAX_PORTS,
+    max_links: int = DEFAULT_MAX_LINKS,
+    max_warnings: int = DEFAULT_MAX_WARNINGS,
+    redact_paths: bool = False,
+) -> Dict[str, Any]:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(read_text(path, max_bytes))
     except json.JSONDecodeError as exc:
         raise ValueError(f"JSON 解析失败：{exc}") from exc
-    return normalize_graph(data)
+    return normalize_graph(
+        data,
+        max_devices=max_devices,
+        max_ports=max_ports,
+        max_links=max_links,
+        max_warnings=max_warnings,
+        redact_paths=redact_paths,
+    )
 
 
 def filter_unknown_graph(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -1557,22 +1684,68 @@ def filter_unknown_graph(payload: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def render_html(payload: Dict[str, Any], base: Path, title: str) -> str:
-    tpl = (base / "template" / "index.html").read_text(encoding="utf-8")
-    css = (base / "template" / "style.css").read_text(encoding="utf-8")
-    app = (base / "template" / "app.js").read_text(encoding="utf-8")
-    vis = (base / "assets" / "vis-network.min.js").read_text(encoding="utf-8")
+def _fill_template(tpl: str, values: Dict[str, str]) -> str:
+    """单次扫描替换；插入的值不会被再次当成占位符。"""
+    out: List[str] = []
+    pos = 0
+    n = len(tpl)
+    while pos < n:
+        next_pos: Optional[int] = None
+        next_token = ""
+        for token in values:
+            found = tpl.find(token, pos)
+            if found >= 0 and (next_pos is None or found < next_pos):
+                next_pos = found
+                next_token = token
+        if next_pos is None:
+            out.append(tpl[pos:])
+            break
+        out.append(tpl[pos:next_pos])
+        out.append(values[next_token])
+        pos = next_pos + len(next_token)
+    return "".join(out)
+
+
+def render_html(
+    payload: Dict[str, Any],
+    base: Path,
+    title: str,
+    max_title: int = DEFAULT_MAX_TITLE,
+) -> str:
+    title = str(title or "")
+    if len(title) > max_title:
+        raise LimitError(f"标题长度超过上限 {max_title}，请缩短标题或提高 --max-title")
+    try:
+        tpl = (base / "template" / "index.html").read_text(encoding="utf-8")
+        css = (base / "template" / "style.css").read_text(encoding="utf-8")
+        app = (base / "template" / "app.js").read_text(encoding="utf-8")
+        vis = (base / "assets" / "vis-network.min.js").read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"渲染模板或资源读取失败：{exc}") from exc
+
+    expected = {
+        "/*__STYLE__*/": 1,
+        "/*__VIS__*/": 1,
+        "/*__APP__*/": 1,
+        "/*__GRAPH__*/": 1,
+        "__TITLE__": 2,
+    }
+    for token, count in expected.items():
+        if tpl.count(token) != count:
+            raise ValueError(f"模板占位符异常：{token} 期望 {count} 次，实际 {tpl.count(token)} 次")
 
     data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     data = data.replace("</", "<\\/")
+    data = data.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+    safe_title = html_lib.escape(title, quote=True)
 
-    html = tpl
-    html = html.replace("/*__STYLE__*/", css)
-    html = html.replace("/*__VIS__*/", vis)
-    html = html.replace("/*__APP__*/", app)
-    html = html.replace("/*__GRAPH__*/", data)
-    html = html.replace("__TITLE__", title)
-    return html
+    return _fill_template(tpl, {
+        "/*__STYLE__*/": css,
+        "/*__VIS__*/": vis,
+        "/*__APP__*/": app,
+        "/*__GRAPH__*/": data,
+        "__TITLE__": safe_title,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -1580,7 +1753,11 @@ def render_html(payload: Dict[str, Any], base: Path, title: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def collect_logs(paths: List[str]) -> List[Path]:
+def collect_logs(
+    paths: List[str],
+    max_files: int = DEFAULT_MAX_FILES,
+    max_total_bytes: int = DEFAULT_MAX_LOG_BYTES,
+) -> List[Path]:
     out: List[Path] = []
     for p in paths:
         path = Path(p)
@@ -1591,12 +1768,24 @@ def collect_logs(paths: List[str]) -> List[Path]:
             out.append(path)
     seen: Set[Path] = set()
     uniq: List[Path] = []
+    total = 0
     for p in out:
-        rp = p.resolve()
+        try:
+            rp = p.resolve()
+        except OSError:
+            continue
         if rp in seen:
             continue
         seen.add(rp)
+        try:
+            total += p.stat().st_size
+        except OSError as exc:
+            raise ValueError(f"无法读取日志文件 {p}: {exc}") from exc
         uniq.append(p)
+        if len(uniq) > max_files:
+            raise LimitError(f"日志文件数量超过上限 {max_files}，请提高 --max-files")
+        if total > max_total_bytes:
+            raise LimitError(f"日志总大小超过上限 {max_total_bytes} 字节，请提高 --max-log-bytes")
     return uniq
 
 
@@ -1638,10 +1827,30 @@ def dump_report(payload: Dict[str, Any]) -> None:
             print(f"  [{w['level']}] {w['msg']}")
 
 
+def atomic_write_text(path: Path, text: str, mode: int = 0o600) -> None:
+    """同目录临时文件 + os.replace，避免留下半个输出文件。"""
+    parent = path.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(parent))
+    try:
+        try:
+            os.fchmod(fd, mode)
+        except (AttributeError, OSError):
+            pass
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+        os.replace(tmp_name, path)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
 def write_graph_json(payload: Dict[str, Any], path: str) -> None:
     out = Path(path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_text(out, json.dumps(payload, ensure_ascii=False, indent=2))
     print(f"已输出中间产物：{out.resolve()}")
 
 
@@ -1650,24 +1859,47 @@ def emit_all(payload: Dict[str, Any], args: argparse.Namespace) -> int:
         dump_report(payload)
 
     written = set()
-    if args.graph_out:
-        write_graph_json(payload, args.graph_out)
-        written.add(str(Path(args.graph_out).resolve()))
-    if args.json_out and str(Path(args.json_out).resolve()) not in written:
-        write_graph_json(payload, args.json_out)
+    try:
+        if args.graph_out:
+            write_graph_json(payload, args.graph_out)
+            written.add(str(Path(args.graph_out).resolve()))
+        if args.json_out and str(Path(args.json_out).resolve()) not in written:
+            write_graph_json(payload, args.json_out)
+    except (OSError, ValueError) as exc:
+        print(f"错误：写入 graph JSON 失败：{exc}", file=sys.stderr)
+        return 2
 
     base = Path(__file__).resolve().parent
-    html = render_html(payload, base, args.title)
+    try:
+        html = render_html(payload, base, args.title, max_title=getattr(args, "max_title", DEFAULT_MAX_TITLE))
+    except (OSError, ValueError) as exc:
+        print(f"错误：渲染失败：{exc}", file=sys.stderr)
+        return 2
+
     out_path = Path(args.output)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(html, encoding="utf-8")
+    try:
+        atomic_write_text(out_path, html)
+    except (OSError, ValueError) as exc:
+        print(f"错误：写入 {out_path} 失败：{exc}", file=sys.stderr)
+        return 2
     print(f"已生成拓扑图：{out_path.resolve()}  ({len(html) / 1024:.0f} KB)")
     if args.open:
-        webbrowser.open(out_path.resolve().as_uri())
+        try:
+            webbrowser.open(out_path.resolve().as_uri())
+        except Exception as exc:  # noqa: BLE001
+            print(f"警告：无法自动打开浏览器：{exc}", file=sys.stderr)
     return 0
 
 
-def load_adapter(spec: str, adapter_input: Optional[str]) -> Dict[str, Any]:
+def load_adapter(
+    spec: str,
+    adapter_input: Optional[str],
+    max_devices: int = DEFAULT_MAX_DEVICES,
+    max_ports: int = DEFAULT_MAX_PORTS,
+    max_links: int = DEFAULT_MAX_LINKS,
+    max_warnings: int = DEFAULT_MAX_WARNINGS,
+    redact_paths: bool = False,
+) -> Dict[str, Any]:
     """Load an external adapter function and return a normalized graph payload.
 
     spec examples:
@@ -1696,7 +1928,14 @@ def load_adapter(spec: str, adapter_input: Optional[str]) -> Dict[str, Any]:
     payload = fn(adapter_input)
     if not isinstance(payload, dict):
         raise ValueError("适配器必须返回 graph JSON 对象")
-    return normalize_graph(payload)
+    return normalize_graph(
+        payload,
+        max_devices=max_devices,
+        max_ports=max_ports,
+        max_links=max_links,
+        max_warnings=max_warnings,
+        redact_paths=redact_paths,
+    )
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -1724,7 +1963,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--dump", action="store_true", help="打印解析结果，便于核对格式")
     parser.add_argument("--json", dest="json_out", help="输出图数据 JSON（--graph-out 的兼容别名）")
     parser.add_argument("--open", action="store_true", help="生成后用浏览器打开")
+    parser.add_argument("--redact-paths", action="store_true", help="输出 sources 只保留文件名，不写绝对路径")
+    parser.add_argument("--max-log-bytes", type=int, default=DEFAULT_MAX_LOG_BYTES, help=f"日志总大小上限（默认 {DEFAULT_MAX_LOG_BYTES}）")
+    parser.add_argument("--max-files", type=int, default=DEFAULT_MAX_FILES, help=f"日志文件数上限（默认 {DEFAULT_MAX_FILES}）")
+    parser.add_argument("--max-graph-bytes", type=int, default=DEFAULT_MAX_GRAPH_BYTES, help=f"graph JSON 大小上限（默认 {DEFAULT_MAX_GRAPH_BYTES}）")
+    parser.add_argument("--max-devices", type=int, default=DEFAULT_MAX_DEVICES, help=f"设备数量上限（默认 {DEFAULT_MAX_DEVICES}）")
+    parser.add_argument("--max-ports", type=int, default=DEFAULT_MAX_PORTS, help=f"端口数量上限（默认 {DEFAULT_MAX_PORTS}）")
+    parser.add_argument("--max-links", type=int, default=DEFAULT_MAX_LINKS, help=f"链路数量上限（默认 {DEFAULT_MAX_LINKS}）")
+    parser.add_argument("--max-warnings", type=int, default=DEFAULT_MAX_WARNINGS, help=f"告警数量上限（默认 {DEFAULT_MAX_WARNINGS}）")
+    parser.add_argument("--max-title", type=int, default=DEFAULT_MAX_TITLE, help=f"标题长度上限（默认 {DEFAULT_MAX_TITLE}）")
     args = parser.parse_args(argv)
+    for name in ("max_log_bytes", "max_files", "max_graph_bytes", "max_devices", "max_ports", "max_links", "max_warnings", "max_title"):
+        if getattr(args, name) <= 0:
+            print(f"错误：--{name.replace('_', '-')} 必须大于 0", file=sys.stderr)
+            return 2
 
     # 0) 外部适配器（CMDB / API / 自定义）
     if args.adapter:
@@ -1732,7 +1984,15 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("错误：--adapter 与 --graph 不能同时使用", file=sys.stderr)
             return 2
         try:
-            payload = load_adapter(args.adapter, args.adapter_input)
+            payload = load_adapter(
+                args.adapter,
+                args.adapter_input,
+                max_devices=args.max_devices,
+                max_ports=args.max_ports,
+                max_links=args.max_links,
+                max_warnings=args.max_warnings,
+                redact_paths=args.redact_paths,
+            )
             if args.exclude_unknown:
                 payload = filter_unknown_graph(payload)
         except Exception as exc:  # noqa: BLE001
@@ -1747,7 +2007,15 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"错误：找不到中间产物 {graph_path}", file=sys.stderr)
             return 2
         try:
-            payload = load_graph(graph_path)
+            payload = load_graph(
+                graph_path,
+                max_bytes=args.max_graph_bytes,
+                max_devices=args.max_devices,
+                max_ports=args.max_ports,
+                max_links=args.max_links,
+                max_warnings=args.max_warnings,
+                redact_paths=args.redact_paths,
+            )
             if args.exclude_unknown:
                 payload = filter_unknown_graph(payload)
         except Exception as exc:  # noqa: BLE001
@@ -1764,36 +2032,55 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not config_path.is_file():
         print(f"错误：找不到配置文件 {config_path}", file=sys.stderr)
         return 2
-    logs = collect_logs(args.logs)
+    try:
+        logs = collect_logs(args.logs, max_files=args.max_files, max_total_bytes=args.max_log_bytes)
+    except ValueError as exc:
+        print(f"错误：{exc}", file=sys.stderr)
+        return 2
     if not logs:
         print(f"错误：{args.logs} 下没有找到日志文件", file=sys.stderr)
         return 2
 
-    ctx = Ctx()
+    ctx = Ctx(
+        max_text_bytes=args.max_log_bytes,
+        max_devices=args.max_devices,
+        max_warnings=args.max_warnings,
+    )
     ctx.sources = [str(p) for p in logs]
 
     try:
         parse_config(config_path, ctx)
     except Exception as exc:  # noqa: BLE001
         print(f"错误：解析 {config_path} 失败：{exc}", file=sys.stderr)
-        raise
+        return 2
 
     if not ctx.devices:
         print(f"错误：{config_path} 中没有解析出任何设备", file=sys.stderr)
         return 2
 
     ctx.build_index()
-    prescan_switch_identities(logs, ctx)
+    try:
+        prescan_switch_identities(logs, ctx)
+    except Exception as exc:  # noqa: BLE001
+        print(f"错误：预扫描日志失败：{exc}", file=sys.stderr)
+        return 2
     for log in logs:
         try:
             parse_switch_log(log, ctx)
+        except LimitError as exc:
+            print(f"错误：{exc}", file=sys.stderr)
+            return 2
         except Exception as exc:  # noqa: BLE001
             ctx.warn(f"{log.name}: 解析异常 {exc}", level="error", source=log.name)
             print(f"警告：解析 {log} 失败：{exc}", file=sys.stderr)
 
     ctx.build_index()
 
-    payload = build_payload(ctx, args)
+    try:
+        payload = build_payload(ctx, args)
+    except Exception as exc:  # noqa: BLE001
+        print(f"错误：构建图数据失败：{exc}", file=sys.stderr)
+        return 2
     return emit_all(payload, args)
 
 

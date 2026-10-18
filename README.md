@@ -6,7 +6,7 @@
 
 > **一句话**：输入交换机日志 + config.txt，输出一张可交互、可导出、完全离线的 SAN/NAS 拓扑图；也支持 graph.json 与 CMDB / API 适配器。
 
-**文档地图**：[图数据契约](docs/graph-schema.md) · [架构与演进](docs/architecture.md) · [Rust 原生渲染注意事项](docs/rust-native-rendering.md) · [适配器契约](adapters/README.md) · [示例数据](sample/) · [最新 HTML](topology.html) · [发布说明](RELEASING.md)
+**文档地图**：[图数据契约](docs/graph-schema.md) · [架构与演进](docs/architecture.md) · [Rust 原生渲染注意事项](docs/rust-native-rendering.md) · [适配器契约](adapters/README.md) · [示例数据](sample/) · [最新 HTML](topology.html) · [发布说明](RELEASING.md) · [安全策略](SECURITY.md)
 
 <a id="toc"></a>
 
@@ -287,6 +287,8 @@ python3 topo.py \
 - 支持 `path.py:function` / `module:function`；不写函数名默认 `build`
 - 示例和契约：[adapters/README.md](adapters/README.md)，样例：[sample/cmdb.json](sample/cmdb.json)
 - `--adapter` 与 `--graph` 互斥；适配器异常返回退出码 2
+- `cmdb_api.py` 默认只允许 `http/https`，拒绝 `file://`、回环和私网地址；内部 CMDB 需要显式设置环境变量 `TOPO_ALLOW_PRIVATE_URL=1`
+- 适配器是**可执行 Python 代码**，不要把不可信的 `--adapter` / `--adapter-input` 直接暴露给外部用户
 
 <a id="sec-4-6"></a>
 
@@ -306,6 +308,15 @@ python3 topo.py \
 | `--dump` | 只打印解析结果，便于核对格式 |
 | `--json PATH` | `--graph-out` 的兼容别名 |
 | `--open` | 生成后用浏览器打开 |
+| `--redact-paths` | 输出 `sources` 只保留文件名，不写绝对路径 |
+| `--max-log-bytes N` | 日志总大小上限，默认 64 MB |
+| `--max-files N` | 日志文件数上限，默认 1000 |
+| `--max-graph-bytes N` | graph JSON 大小上限，默认 64 MB |
+| `--max-devices N` | 设备数量上限，默认 20000 |
+| `--max-ports N` | 端口数量上限，默认 200000 |
+| `--max-links N` | 链路数量上限，默认 500000 |
+| `--max-warnings N` | 告警数量上限，默认 5000 |
+| `--max-title N` | 标题长度上限，默认 200 |
 
 <a id="sec-4-7"></a>
 
@@ -316,7 +327,8 @@ python3 topo.py \
 | `topology.html` | 单文件；数据、CSS、JS、vis-network 全部内联；`file://` 可直接打开 |
 | `topology.graph.json` | 可选；版本化中间产物，可复用/二次渲染/留档 |
 | `--dump` 文本 | 设备、端口、链路、告警清单，适合排错 |
-| 退出码 | 成功 `0`；缺少输入或非法 graph.json 返回 `2` |
+| 退出码 | 成功 `0`；缺少输入、超限、非法 graph.json 或写入失败返回 `2` |
+| 写入方式 | 同目录临时文件 + 原子替换；HTML / graph JSON 权限 `0600` |
 
 <a id="sec-4-8"></a>
 
@@ -1180,20 +1192,30 @@ python3 topo.py --graph sample/mini.graph.json -o /tmp/mini.html
 
 生成 HTML 内联的 `vis-network 9.1.9` 采用 Apache-2.0 / MIT 双许可；本项目按 MIT 选项分发，版权和许可见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。Python 侧仅使用标准库，没有运行时第三方依赖。
 
-### v0.1.0
+### v0.1.1
 
-当前版本为 **v0.1.0**。GitHub Release 会提供：
+当前版本为 **v0.1.1**（v0.1.0 之后的安全/健壮性补丁）。GitHub Release 会提供：
 
 | 文件 | 用途 |
 | --- | --- |
-| `topology-demo-v0.1.0.html` | 样例 config + 交换机日志生成，双击离线打开 |
-| `cmdb-demo-v0.1.0.html` | CMDB JSON 适配器样例 |
-| `m_opslog_topo-sample-v0.1.0.zip` | 样例 config / logs / graph / CMDB |
+| `topology-demo-v0.1.1.html` | 样例 config + 交换机日志生成，双击离线打开 |
+| `cmdb-demo-v0.1.1.html` | CMDB JSON 适配器样例 |
+| `m_opslog_topo-sample-v0.1.1.zip` | 样例 config / logs / graph / CMDB |
 | `SHA256SUMS` | 校验和 |
 | Source code (zip/tar.gz) | GitHub 自动生成 |
 
 发布流程、版本号和手动兜底见 [`RELEASING.md`](RELEASING.md)，版本变更见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 > 发布只包含 `sample/` 脱敏样例，不包含真实客户日志、真实 WWN 或生产拓扑。生成的 HTML 本身包含完整拓扑和 WWN，仍然应当按敏感文件管理。
+
+### 安全与回归
+
+- 标题、warning level、筛选条 key、CSV 单元格都做了转义/白名单/公式注入防护
+- graph JSON 注入做了 `</`、U+2028/U+2029 转义
+- 输出采用同目录临时文件 + 原子替换，权限 `0600`
+- 输入有大小/数量上限；超限返回退出码 `2`
+- `--redact-paths` 可去掉 `sources` 里的绝对路径
+- CI 运行 `tests/` 下的 hardening 单元测试；release 必须先通过同一组测试
+- 漏洞报告和威胁模型见 [`SECURITY.md`](SECURITY.md)
 
 [↑ 返回目录](#toc)

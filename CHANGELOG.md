@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented here.
 
+## [v0.1.1] - 2026-10-18
+
+### Security
+
+- Escape the page title before embedding it in HTML.
+- Whitelist warning levels and escape filter keys used in DOM attributes.
+- Guard CSV exports against spreadsheet formula injection.
+- Validate `cmdb_api.py` URLs: only `http/https`, block localhost/private
+  addresses by default, and cap response size.
+- Add configurable input limits for logs, graph JSON, devices, ports, links,
+  warnings, and titles.
+- Use atomic writes with `0600` permissions for HTML and graph JSON output.
+- Add `--redact-paths` to remove absolute source paths from emitted data.
+
+### Changed
+
+- Normalize now rejects duplicate device IDs (with a warning), caps warning
+  levels, and reports duplicate port IDs.
+- CLI render/write failures return exit code `2` instead of a traceback.
+
+### Tests
+
+- Add `tests/test_hardening.py` (title/script escaping, warning levels,
+  duplicate IDs, input limits, atomic writes, URL validation, redaction).
+- CI runs the hardening tests.
+- Release workflow now has a required test job before publishing.
+
 ## [v0.1.0] - 2026-10-17
 
 First public release: an offline SAN/NAS topology generator that turns switch
@@ -32,5 +59,6 @@ logs and config into one self-contained HTML file.
   nodes only.
 - No zoning, LUN mapping, multipath software, or live API synchronization.
 
-[Unreleased]: https://github.com/jacob-bytes/m_opslog_topo/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jacob-bytes/m_opslog_topo/compare/v0.1.1...HEAD
+[v0.1.1]: https://github.com/jacob-bytes/m_opslog_topo/releases/tag/v0.1.1
 [v0.1.0]: https://github.com/jacob-bytes/m_opslog_topo/releases/tag/v0.1.0

@@ -107,7 +107,7 @@ Python 的 `render_html()` 不做校验，也不做 normalize。
 
 ## 3. 最大的坑：顺序替换会互相污染
 
-Python 当前是顺序 `replace`：
+v0.1.0 的 Python 实现是顺序 `replace`（v0.1.1 已换成单次扫描，但顺序替换的坑仍然适用于自己实现 `replace` 的 Rust 代码）：
 
 ```python
 html = tpl
@@ -124,7 +124,7 @@ html = html.replace("__TITLE__", title)
 
 反过来说，如果先把 title 换进去，title 里如果包含 `/*__STYLE__*/`，又会被后续替换污染。
 
-**正确做法是单次扫描替换，不重新扫描替换结果。**
+**正确做法是单次扫描替换，不重新扫描替换结果。** v0.1.1 的 Python `_fill_template()` 已经这样做；Rust 应保持一致。
 
 也就是说：
 
@@ -239,7 +239,7 @@ fn escape_html(s: &str) -> String {
 - 去掉控制字符
 - 不要把用户输入直接拼进 title
 
-Python 当前是直接替换 title，不做转义；Rust 原生实现应该做得更安全，但要接受和 Python 版本的输出不完全逐字节一致。
+v0.1.1 的 Python 已经用 `html.escape(title)` 做 HTML 文本转义；Rust 应保持一致，并额外限制标题长度。
 
 ---
 
