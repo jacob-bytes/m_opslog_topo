@@ -47,3 +47,13 @@ Apache-2.0 license text: https://www.apache.org/licenses/LICENSE-2.0
 
 No other third-party runtime libraries are required. The Python tooling uses
 only the Python standard library.
+
+
+## Rust native renderer (optional)
+
+The optional crate in `rust/topo-render/` depends on `serde_json` and the
+transitive crates pinned in `rust/topo-render/Cargo.lock`. These are build-time
+dependencies for the native renderer; they are not embedded in the generated
+HTML. Their license metadata is available from crates.io and is reproduced in
+the crate packages when vendored for a Rust build. The generated HTML itself
+still bundles only vis-network.

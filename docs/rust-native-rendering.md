@@ -1,6 +1,6 @@
 # Rust 原生渲染注意事项
 
-本文是给“Rust 直接读模板 + graph JSON 拼 HTML”的实现备忘，不是 API 文档。
+本文是给“Rust 直接读模板 + graph JSON 拼 HTML”的实现备忘，不是 API 文档。参考实现已落地到 [rust/topo-render/](../rust/topo-render/)，并有 Python/Rust 差分测试。
 
 核心结论：
 

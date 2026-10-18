@@ -6,7 +6,7 @@
 
 > **一句话**：输入交换机日志 + config.txt，输出一张可交互、可导出、完全离线的 SAN/NAS 拓扑图；也支持 graph.json 与 CMDB / API 适配器。
 
-**文档地图**：[图数据契约](docs/graph-schema.md) · [架构与演进](docs/architecture.md) · [Rust 原生渲染注意事项](docs/rust-native-rendering.md) · [适配器契约](adapters/README.md) · [示例数据](sample/) · [最新 HTML](topology.html) · [发布说明](RELEASING.md) · [安全策略](SECURITY.md)
+**文档地图**：[图数据契约](docs/graph-schema.md) · [架构与演进](docs/architecture.md) · [Rust 原生渲染注意事项](docs/rust-native-rendering.md) · [Rust 原生渲染器](rust/topo-render/) · [性能基线](reports/perf-baseline.md) · [适配器契约](adapters/README.md) · [示例数据](sample/) · [最新 HTML](topology.html) · [发布说明](RELEASING.md) · [安全策略](SECURITY.md)
 
 <a id="toc"></a>
 
@@ -71,6 +71,7 @@
 - [10. 常见问题](#sec-10)
 - [11. 已知边界](#sec-11)
 - [12. 许可证与发布](#sec-12)
+- [13. 测试与性能基线](#sec-13)
 
 <a id="sec-1"></a>
 
@@ -1192,15 +1193,15 @@ python3 topo.py --graph sample/mini.graph.json -o /tmp/mini.html
 
 生成 HTML 内联的 `vis-network 9.1.9` 采用 Apache-2.0 / MIT 双许可；本项目按 MIT 选项分发，版权和许可见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。Python 侧仅使用标准库，没有运行时第三方依赖。
 
-### v0.1.2
+### v0.1.3
 
-当前版本为 **v0.1.2**（v0.1.0 之后的安全/健壮性补丁）。GitHub Release 会提供：
+当前版本为 **v0.1.3**（v0.1.0 之后的安全/健壮性补丁 + Rust 差分/性能基线）。GitHub Release 会提供：
 
 | 文件 | 用途 |
 | --- | --- |
-| `topology-demo-v0.1.2.html` | 样例 config + 交换机日志生成，双击离线打开 |
-| `cmdb-demo-v0.1.2.html` | CMDB JSON 适配器样例 |
-| `m_opslog_topo-sample-v0.1.2.zip` | 样例 config / logs / graph / CMDB |
+| `topology-demo-v0.1.3.html` | 样例 config + 交换机日志生成，双击离线打开 |
+| `cmdb-demo-v0.1.3.html` | CMDB JSON 适配器样例 |
+| `m_opslog_topo-sample-v0.1.3.zip` | 样例 config / logs / graph / CMDB |
 | `SHA256SUMS` | 校验和 |
 | Source code (zip/tar.gz) | GitHub 自动生成 |
 
@@ -1217,5 +1218,72 @@ python3 topo.py --graph sample/mini.graph.json -o /tmp/mini.html
 - `--redact-paths` 可去掉 `sources` 里的绝对路径
 - CI 运行 `tests/` 下的 hardening 单元测试；release 必须先通过同一组测试
 - 漏洞报告和威胁模型见 [`SECURITY.md`](SECURITY.md)
+
+<a id="sec-13"></a>
+
+## 13. 测试与性能基线
+
+### 13.1 单元 / 静态测试
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+当前覆盖：
+
+- HTML title / `</script>` / 占位符注入
+- warning level、filter key、storage vendor/model、matrix kind 转义
+- normalize 重复 ID、warning level、数量上限、路径脱敏
+- 输入大小上限
+- 原子写 + `0600`
+- CMDB API URL 校验
+
+### 13.2 Rust 原生渲染差分
+
+Rust 渲染器在 [rust/topo-render/](rust/topo-render/)：
+
+```bash
+cargo test --manifest-path rust/topo-render/Cargo.toml
+python3 -m unittest tests.differential.test_differential -v
+```
+
+差分测试比较：
+
+- Python 与 Rust 渲染出的 `<title>` 文本
+- `window.__GRAPH__` 解析后的语义对象
+- 恶意字符串注入后 script 不被提前闭合
+- 模板占位符不残留
+
+Rust 使用 `\u003C` 转义所有 `<`；Python 使用 `<\/` 转义闭合标签。测试比较语义，不要求逐字节一致。
+
+### 13.3 性能基线
+
+```bash
+python3 tools/perf_baseline.py \
+  --sizes 100 400 1000 \
+  --repeat 3 \
+  --rust
+```
+
+生成：
+
+- [reports/perf-baseline.json](reports/perf-baseline.json)
+- [reports/perf-baseline.md](reports/perf-baseline.md)
+
+本机 macOS / Python 3.13.5 / 3 次中位数：
+
+| 主机数 | 设备 | 链路 | normalize | render | HTML | Rust 进程 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 100 | 112 | 120 | 11.0 ms | 5.9 ms | 1.05 MB | 8.3 ms |
+| 400 | 412 | 420 | 28.7 ms | 14.1 ms | 1.19 MB | 16.9 ms |
+| 1000 | 1012 | 1020 | 74.5 ms | 33.2 ms | 1.48 MB | 36.8 ms |
+
+注意：
+
+- 合成数据：主机 + 8 接入 + 2 核心 + 2 存储
+- `render` 包含模板/资源读取，不只是 JSON 拼接
+- Rust 是独立进程端到端时间，包含启动和文件 I/O
+- 这是本机基线，不作为 CI 硬阈值
+- 性能 workflow 为手动触发，结果作为 artifact 上传
 
 [↑ 返回目录](#toc)

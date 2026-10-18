@@ -1,0 +1,56 @@
+{
+  "tool": "perf-baseline",
+  "generated_at": "2026-10-18 14:12:31",
+  "python": "3.13.5",
+  "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "repeat": 3,
+  "title": "m_opslog_topo perf baseline",
+  "rust": true,
+  "rows": [
+    {
+      "hosts": 100,
+      "devices": 112,
+      "links": 120,
+      "graph_bytes": 44902,
+      "normalize_ms": 10.997,
+      "render_ms": 5.908,
+      "html_bytes": 1075072,
+      "html_sha256": "801d8c22d8091d5b4ceb0520b1f9eab3599c9b301e6be2c08ba52822ccb68af2",
+      "normalize_peak_kb": 347.8,
+      "render_peak_kb": 4213.9,
+      "rust_ms": 8.25,
+      "rust_html_bytes": 1075072,
+      "rust_html_sha256": "9a3c8b3d1cececeb10eee252b4257c4f2777380765d516ecefb9203f3ab6bbb0"
+    },
+    {
+      "hosts": 400,
+      "devices": 412,
+      "links": 420,
+      "graph_bytes": 149306,
+      "normalize_ms": 28.74,
+      "render_ms": 14.121,
+      "html_bytes": 1217672,
+      "html_sha256": "21446ead1b311ae676a363fb931d90ba0b81492f780699e7a937cdb77467aa64",
+      "normalize_peak_kb": 1026.8,
+      "render_peak_kb": 4770.9,
+      "rust_ms": 16.851,
+      "rust_html_bytes": 1217672,
+      "rust_html_sha256": "9cf6bcd9b0c2eb0155adf4a27efc31d5ca7968565b2562bbe807bee0e0df1977"
+    },
+    {
+      "hosts": 1000,
+      "devices": 1012,
+      "links": 1020,
+      "graph_bytes": 364522,
+      "normalize_ms": 74.454,
+      "render_ms": 33.207,
+      "html_bytes": 1517492,
+      "html_sha256": "74eecac2c580cd746e611d0b998e87139a86019245dd251d4a5c278f3cf7c526",
+      "normalize_peak_kb": 2525.0,
+      "render_peak_kb": 5942.1,
+      "rust_ms": 36.78,
+      "rust_html_bytes": 1517492,
+      "rust_html_sha256": "d16ca6ad0fcdfa64eeca4126420aa4e5c449284578319a75283bf501ec1c837c"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+name: perf
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build native renderer
+        run: cargo build --quiet --manifest-path rust/topo-render/Cargo.toml
+
+      - name: Run performance baseline
+        run: |
+          python3 tools/perf_baseline.py \
+            --sizes 100 400 1000 \
+            --repeat 3 \
+            --rust \
+            --output reports/perf-baseline-ci.json \
+            --markdown reports/perf-baseline-ci.md
+
+      - name: Upload baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-baseline
+          path: |
+            reports/perf-baseline-ci.json
+            reports/perf-baseline-ci.md
+          if-no-files-found: error

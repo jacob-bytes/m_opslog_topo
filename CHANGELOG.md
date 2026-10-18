@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [v0.1.3] - 2026-10-18
+
+### Added
+
+- Native Rust renderer crate at `rust/topo-render/` with the same template
+  placeholders and safe JSON/title handling.
+- Python/Rust differential test comparing title, graph semantics, and
+  injection-sensitive output.
+- `tools/perf_baseline.py` and local performance report for 100/400/1000
+  synthetic hosts.
+- `rust-diff` CI workflow and manual `perf` workflow.
+
 ## [v0.1.2] - 2026-10-18
 
 ### Fixed
@@ -68,7 +80,8 @@ logs and config into one self-contained HTML file.
   nodes only.
 - No zoning, LUN mapping, multipath software, or live API synchronization.
 
-[Unreleased]: https://github.com/jacob-bytes/m_opslog_topo/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/jacob-bytes/m_opslog_topo/compare/v0.1.3...HEAD
+[v0.1.3]: https://github.com/jacob-bytes/m_opslog_topo/releases/tag/v0.1.3
 [v0.1.2]: https://github.com/jacob-bytes/m_opslog_topo/releases/tag/v0.1.2
 [v0.1.1]: https://github.com/jacob-bytes/m_opslog_topo/releases/tag/v0.1.1
 [v0.1.0]: https://github.com/jacob-bytes/m_opslog_topo/releases/tag/v0.1.0
