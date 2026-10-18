@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## [v0.1.2] - 2026-10-18
+
+### Fixed
+
+- Escape storage vendor/model text in the detail panel.
+- Escape unknown link kinds in the port matrix.
+- Lock the remaining HTML interpolation points with additional frontend
+  hardening tests.
+
 ## [v0.1.1] - 2026-10-18
 
 ### Security
@@ -59,6 +68,7 @@ logs and config into one self-contained HTML file.
   nodes only.
 - No zoning, LUN mapping, multipath software, or live API synchronization.
 
-[Unreleased]: https://github.com/jacob-bytes/m_opslog_topo/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/jacob-bytes/m_opslog_topo/compare/v0.1.2...HEAD
+[v0.1.2]: https://github.com/jacob-bytes/m_opslog_topo/releases/tag/v0.1.2
 [v0.1.1]: https://github.com/jacob-bytes/m_opslog_topo/releases/tag/v0.1.1
 [v0.1.0]: https://github.com/jacob-bytes/m_opslog_topo/releases/tag/v0.1.0

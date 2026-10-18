@@ -4005,7 +4005,7 @@
       var dotClass = down ? 'bad' : (p.connected ? 'on' : (p.unused ? 'unused' : 'off'));
       var peer = r.peerDev ? esc(r.peerDev.label) : '—';
       var peerPort = r.peerPort ? esc(r.peerPort.label) : '—';
-      var kind = r.kind ? (KIND_LABEL[r.kind] || r.kind) : '—';
+      var kind = r.kind ? esc(KIND_LABEL[r.kind] || r.kind) : '—';
       var linkStatus = r.status ? esc(r.status) : '—';
       return '<tr>' +
         '<td class="m-port">' + esc(p.label) + '</td>' +
@@ -4413,7 +4413,7 @@
       '<div class="detail-icon" style="color:' + pal.accent + ';background:' + pal.badge + '">' + TYPE_ICON[d.type] + '</div>' +
       '<div class="detail-title"><h3>' + esc(isPort ? port.label + ' · ' + d.label : displayName(d)) + '</h3>' +
       '<p>' + (isPort ? (port.connected ? '端口已连接' : '端口未连接') :
-        (d.type === 'storage' ? storageVendorLabel(d) + ' ' + storageInfo(d).model + ' · ' + d.ports.length + ' 个端口'
+        (d.type === 'storage' ? esc(storageVendorLabel(d)) + ' ' + esc(storageInfo(d).model) + ' · ' + d.ports.length + ' 个端口'
           : TYPE_LABEL[d.type] + ' · ' + d.ports.length + ' 个端口')) + '</p></div>' +
       '<button class="close-btn" data-action="close" title="关闭">×</button>' +
       '</div>';

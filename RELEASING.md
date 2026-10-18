@@ -2,7 +2,7 @@
 
 ## Versioning
 
-Use tags like `v0.1.1`, `v0.2.0`. The generated HTML and the graph IR
+Use tags like `v0.1.2`, `v0.2.0`. The generated HTML and the graph IR
 (`schema_version`) are versioned independently; changing the graph schema
 requires a README/CHANGELOG note.
 
@@ -32,16 +32,16 @@ The tag push runs `.github/workflows/release.yml`, which builds the demo files
 and creates the GitHub Release:
 
 ```bash
-git tag -a v0.1.1 -m "v0.1.1"
+git tag -a v0.1.2 -m "v0.1.2"
 git push origin main
-git push origin v0.1.1
+git push origin v0.1.2
 ```
 
 Release assets produced by the workflow:
 
-- `topology-demo-v0.1.1.html` — sample config/logs, offline single file
-- `cmdb-demo-v0.1.1.html` — sample CMDB adapter, offline single file
-- `m_opslog_topo-sample-v0.1.1.zip` — sample config/logs/graph/CMDB
+- `topology-demo-v0.1.2.html` — sample config/logs, offline single file
+- `cmdb-demo-v0.1.2.html` — sample CMDB adapter, offline single file
+- `m_opslog_topo-sample-v0.1.2.zip` — sample config/logs/graph/CMDB
 - `SHA256SUMS`
 - GitHub's automatic source code zip/tar
 
@@ -51,16 +51,16 @@ If Actions are disabled:
 
 ```bash
 mkdir -p release
-python3 topo.py --config sample/config.txt --logs sample/logs -o release/topology-demo-v0.1.1.html
-python3 topo.py --adapter adapters/cmdb_json.py --adapter-input sample/cmdb.json -o release/cmdb-demo-v0.1.1.html
-cd sample && zip -r ../release/m_opslog_topo-sample-v0.1.1.zip . && cd ..
+python3 topo.py --config sample/config.txt --logs sample/logs -o release/topology-demo-v0.1.2.html
+python3 topo.py --adapter adapters/cmdb_json.py --adapter-input sample/cmdb.json -o release/cmdb-demo-v0.1.2.html
+cd sample && zip -r ../release/m_opslog_topo-sample-v0.1.2.zip . && cd ..
 cd release && sha256sum *.html *.zip > SHA256SUMS && cd ..
-gh release create v0.1.1 release/* --generate-notes
+gh release create v0.1.2 release/* --generate-notes
 ```
 
 ## After release
 
 - Verify the Actions run and the release assets.
-- Download `topology-demo-v0.1.1.html` and open it offline in a browser.
+- Download `topology-demo-v0.1.2.html` and open it offline in a browser.
 - Verify `SHA256SUMS`.
 - Keep real customer logs out of the repository and release assets.

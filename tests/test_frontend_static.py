@@ -23,6 +23,11 @@ class FrontendHardeningMarkers(unittest.TestCase):
     def test_download_filename_is_sanitized(self):
         self.assertIn("a.download = safeDownloadName(", self.app)
 
+    def test_storage_metadata_is_escaped_in_detail(self):
+        self.assertIn("esc(storageVendorLabel(d))", self.app)
+        self.assertIn("esc(storageInfo(d).model)", self.app)
+        self.assertIn("esc(KIND_LABEL[r.kind] || r.kind)", self.app)
+
 
 if __name__ == "__main__":
     unittest.main()

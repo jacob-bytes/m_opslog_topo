@@ -3,7 +3,7 @@
 ## Supported versions
 
 Security fixes target the latest release on `main`. The current supported
-release is **v0.1.1**.
+release is **v0.1.2**.
 
 ## Reporting a vulnerability
 

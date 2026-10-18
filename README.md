@@ -1192,15 +1192,15 @@ python3 topo.py --graph sample/mini.graph.json -o /tmp/mini.html
 
 生成 HTML 内联的 `vis-network 9.1.9` 采用 Apache-2.0 / MIT 双许可；本项目按 MIT 选项分发，版权和许可见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。Python 侧仅使用标准库，没有运行时第三方依赖。
 
-### v0.1.1
+### v0.1.2
 
-当前版本为 **v0.1.1**（v0.1.0 之后的安全/健壮性补丁）。GitHub Release 会提供：
+当前版本为 **v0.1.2**（v0.1.0 之后的安全/健壮性补丁）。GitHub Release 会提供：
 
 | 文件 | 用途 |
 | --- | --- |
-| `topology-demo-v0.1.1.html` | 样例 config + 交换机日志生成，双击离线打开 |
-| `cmdb-demo-v0.1.1.html` | CMDB JSON 适配器样例 |
-| `m_opslog_topo-sample-v0.1.1.zip` | 样例 config / logs / graph / CMDB |
+| `topology-demo-v0.1.2.html` | 样例 config + 交换机日志生成，双击离线打开 |
+| `cmdb-demo-v0.1.2.html` | CMDB JSON 适配器样例 |
+| `m_opslog_topo-sample-v0.1.2.zip` | 样例 config / logs / graph / CMDB |
 | `SHA256SUMS` | 校验和 |
 | Source code (zip/tar.gz) | GitHub 自动生成 |
 
